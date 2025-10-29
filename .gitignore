@@ -70,3 +70,6 @@ temp/
 # Backup files
 *.bak
 *.backup
+
+# AI Agent
+.claude

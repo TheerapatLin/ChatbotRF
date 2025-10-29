@@ -26,6 +26,7 @@
       <!-- Text Input -->
       <div class="flex-1">
         <textarea
+          ref="textareaRef"
           v-model="message"
           @keydown.enter.exact.prevent="sendMessage"
           placeholder="พิมพ์ข้อความ... (Enter เพื่อส่ง, Shift+Enter ขึ้นบรรทัดใหม่)"
@@ -56,14 +57,18 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, inject, nextTick } from 'vue'
 import { useChatStore } from '@/store/chat'
 import { useAudioRecorder } from '@/composables/useAudioRecorder'
 
 const chatStore = useChatStore()
 const { isRecording, startRecording, stopRecording } = useAudioRecorder()
 
+// Get WebSocket from parent component
+const wsConnection = inject('wsConnection', null)
+
 const message = ref('')
+const textareaRef = ref(null)
 const isStreaming = computed(() => chatStore.isStreaming)
 const chatMode = computed(() => chatStore.chatMode)
 
@@ -77,9 +82,27 @@ const sendMessage = async () => {
   }
 
   chatStore.addMessage(userMessage)
+
+  // Send via WebSocket
+  if (wsConnection && wsConnection.sendMessage) {
+    chatStore.startStreaming()
+    const messagePayload = {
+      content: message.value,
+      persona_id: chatStore.currentPersonaId,
+      system_prompt: chatStore.systemPrompt || ''
+    }
+    wsConnection.sendMessage(messagePayload)
+  } else {
+    console.error('WebSocket not connected')
+  }
+
   message.value = ''
 
-  console.log('Message sent (WebSocket integration needed)')
+  // Focus back to textarea after sending
+  await nextTick()
+  if (textareaRef.value) {
+    textareaRef.value.focus()
+  }
 }
 
 const toggleRecording = async () => {

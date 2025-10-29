@@ -36,9 +36,10 @@ func NewWebSocketController(
 
 // WSMessage represents incoming WebSocket messages
 type WSMessage struct {
-	Type      string `json:"type"`       // "message"
-	Content   string `json:"content"`    // User message
-	PersonaID *int   `json:"persona_id"` // Persona ID
+	Type         string `json:"type"`          // "message"
+	Content      string `json:"content"`       // User message
+	PersonaID    *int   `json:"persona_id"`    // Persona ID
+	SystemPrompt string `json:"system_prompt"` // Optional custom system prompt
 }
 
 // WSResponse represents outgoing WebSocket messages
@@ -106,11 +107,19 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 		return fmt.Errorf("persona with ID %d not found", personaID)
 	}
 
-	// 3. Prepare messages for OpenAI
+	// 3. Determine system prompt (custom prompt takes precedence over persona prompt)
+	systemPrompt := persona.SystemPrompt
+	if msg.SystemPrompt != "" {
+		// Use custom system prompt from frontend
+		// Append to persona's base prompt for context
+		systemPrompt = persona.SystemPrompt + "\n\nAdditional instructions: " + msg.SystemPrompt
+	}
+
+	// 4. Prepare messages for OpenAI
 	messages := []openai.ChatCompletionMessage{
 		{
 			Role:    openai.ChatMessageRoleSystem,
-			Content: persona.SystemPrompt,
+			Content: systemPrompt,
 		},
 		{
 			Role:    openai.ChatMessageRoleUser,
@@ -118,14 +127,14 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 		},
 	}
 
-	// 4. Call OpenAI streaming API
+	// 5. Call OpenAI streaming API
 	stream, err := ctrl.openaiService.CreateStreamingChatCompletion(ctx, messages)
 	if err != nil {
 		return fmt.Errorf("failed to create streaming request: %w", err)
 	}
 	defer stream.Close()
 
-	// 5. Stream the response to client
+	// 6. Stream the response to client
 	fullContent := ""
 
 	for {
@@ -160,7 +169,7 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 	}
 
 streamDone:
-	// 6. Save user message to database
+	// 7. Save user message to database
 	userMessage := &models.Message{
 		Role:      models.RoleUser,
 		Content:   msg.Content,
@@ -171,7 +180,7 @@ streamDone:
 		log.Printf("Failed to save user message: %v", err)
 	}
 
-	// 7. Save assistant response to database
+	// 8. Save assistant response to database
 	// Calculate tokens (simplified - in real app would get from OpenAI response)
 	tokensUsed := len(fullContent) / 4 // Rough estimate
 
@@ -186,7 +195,7 @@ streamDone:
 		log.Printf("Failed to save assistant message: %v", err)
 	}
 
-	// 8. Send completion message
+	// 9. Send completion message
 	if err := ctrl.sendDone(c, assistantMessage.ID.String(), tokensUsed); err != nil {
 		return err
 	}

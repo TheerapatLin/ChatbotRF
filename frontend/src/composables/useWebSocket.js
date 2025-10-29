@@ -25,7 +25,6 @@ export function useWebSocket() {
 
       ws.value.onmessage = (event) => {
         const message = JSON.parse(event.data)
-        console.log('WebSocket message received:', message)
 
         if (message.type === 'chunk') {
           if (message.done) {
@@ -62,18 +61,30 @@ export function useWebSocket() {
     }
   }
 
-  function sendMessage(content, personaId = 1) {
+  function sendMessage(payload) {
     if (!ws.value || ws.value.readyState !== WebSocket.OPEN) {
       console.error('WebSocket is not connected')
       return false
     }
 
-    const message = {
-      type: 'message',
-      content,
-      persona_id: personaId
+    // Support both old format (string) and new format (object)
+    let message
+    if (typeof payload === 'string') {
+      message = {
+        type: 'message',
+        content: payload,
+        persona_id: 1
+      }
+    } else {
+      message = {
+        type: 'message',
+        content: payload.content,
+        persona_id: payload.persona_id || 1,
+        system_prompt: payload.system_prompt || ''
+      }
     }
 
+    console.log('Sending WebSocket message:', message)
     ws.value.send(JSON.stringify(message))
     return true
   }

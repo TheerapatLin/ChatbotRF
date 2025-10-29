@@ -407,7 +407,7 @@ curl http://localhost:3000/api/personas/2
 
 ## 🎤 Audio Endpoints
 
-### 1. Transcribe Audio
+### 1. Transcribe Audio (Speech-to-Text)
 
 `POST /api/audio/transcribe`
 
@@ -494,6 +494,532 @@ fetch('http://localhost:3000/api/audio/transcribe', {
 ```json
 {
   "error": "unsupported file format. Allowed: mp3, mp4, wav, webm, m4a"
+}
+```
+
+---
+
+### 2. Text-to-Speech (TTS)
+
+`POST /api/audio/tts`
+
+แปลงข้อความเป็นเสียงพูดด้วย OpenAI Text-to-Speech API หรือส่งผ่าน WebSocket สำหรับการสตรีมแชท
+
+#### Implementation Options
+
+**Option A: REST API Endpoint (Standalone)**
+
+สำหรับแปลงข้อความเป็นเสียงแบบอิสระ
+
+**Option B: WebSocket Integration (Recommended)**
+
+สำหรับการตอบกลับแบบสตรีมพร้อมเสียง (ใช้กับการแชท)
+
+---
+
+#### Option A: REST API Endpoint
+
+`POST /api/audio/tts`
+
+#### Request
+
+**Headers:**
+```
+Content-Type: application/json
+```
+
+**Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `text` | string | ✅ Yes | ข้อความที่ต้องการแปลงเป็นเสียง (max 4096 characters) |
+| `voice` | string | ❌ No | เสียงที่ต้องการใช้ (default: `nova`) |
+| `model` | string | ❌ No | โมเดล TTS (default: `tts-1`) |
+| `response_format` | string | ❌ No | รูปแบบไฟล์เสียง (default: `mp3`) |
+| `speed` | float | ❌ No | ความเร็วการพูด 0.25-4.0 (default: `1.0`) |
+
+**Request Example:**
+```json
+{
+  "text": "สวัสดีครับ ยินดีต้อนรับสู่ระบบ AI Chatbot",
+  "voice": "nova",
+  "model": "tts-1",
+  "response_format": "mp3",
+  "speed": 1.0
+}
+```
+
+#### Available Voices
+
+| Voice | Description | Best For |
+|-------|-------------|----------|
+| `alloy` | Neutral, balanced | General purpose |
+| `echo` | Male voice | Professional content |
+| `fable` | British accent | Storytelling, narratives |
+| `onyx` | Deep male voice | Authority, announcements |
+| `nova` | Female voice (default) | Friendly conversations |
+| `shimmer` | Soft female voice | Calm, soothing content |
+
+#### Available Models
+
+| Model | Quality | Speed | Cost per 1K chars |
+|-------|---------|-------|-------------------|
+| `tts-1` | Standard | Fast | $0.015 |
+| `tts-1-hd` | High Definition | Slower | $0.030 |
+
+#### Response Format Options
+
+| Format | Description | Use Case |
+|--------|-------------|----------|
+| `mp3` | MPEG Audio (default) | General use, good balance |
+| `opus` | Opus codec | Real-time streaming, low latency |
+| `aac` | Advanced Audio Coding | Good compression |
+| `flac` | Lossless audio | High quality, archival |
+| `wav` | Uncompressed | Audio editing |
+| `pcm` | Raw PCM audio | Low-level processing |
+
+#### Response
+
+**Status**: `200 OK`
+
+**Content-Type**: `audio/mpeg` (or selected format)
+
+**Headers:**
+```
+Content-Type: audio/mpeg
+Content-Length: 45678
+X-Audio-Duration: 5.2
+X-Characters-Used: 52
+```
+
+**Body**: Binary audio data
+
+**Alternative JSON Response (with base64):**
+```json
+{
+  "audio_data": "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA...",
+  "audio_url": "/audio/tts_20251029_143000.mp3",
+  "format": "mp3",
+  "duration": 5.2,
+  "characters_used": 52,
+  "voice": "nova",
+  "timestamp": "2025-10-29T14:30:00Z"
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `audio_data` | string | Base64-encoded audio data |
+| `audio_url` | string | URL path to saved audio file |
+| `format` | string | Audio format used |
+| `duration` | float | Audio duration in seconds |
+| `characters_used` | int | Number of characters processed |
+| `voice` | string | Voice used for generation |
+| `timestamp` | string | Generation timestamp |
+
+---
+
+#### Option B: WebSocket Integration (Recommended for Chat)
+
+เมื่อส่งข้อความผ่าน WebSocket พร้อม flag `enable_tts: true` ระบบจะตอบกลับทั้งข้อความและเสียง
+
+**WebSocket URL:**
+```
+ws://localhost:3001/api/chat/stream
+```
+
+**Client Request Format:**
+```json
+{
+  "type": "message",
+  "content": "อธิบายเกี่ยวกับ Go programming language",
+  "persona_id": 1,
+  "system_prompt": "",
+  "enable_tts": true,
+  "tts_voice": "nova",
+  "tts_model": "tts-1"
+}
+```
+
+**Additional WebSocket Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `enable_tts` | boolean | ❌ No | เปิดใช้งาน TTS (default: `false`) |
+| `tts_voice` | string | ❌ No | เสียงที่ต้องการ (default: `nova`) |
+| `tts_model` | string | ❌ No | โมเดล TTS (default: `tts-1`) |
+
+**Server Response (Streaming with Audio):**
+
+```json
+// 1. Text chunks (streaming)
+{"type": "chunk", "content": "Go programming", "done": false}
+{"type": "chunk", "content": " language เป็น", "done": false}
+{"type": "chunk", "content": "...", "done": false}
+
+// 2. Final message with audio
+{
+  "type": "chunk",
+  "content": "",
+  "done": true,
+  "message_id": "550e8400-e29b-41d4-a716-446655440000",
+  "tokens_used": 150,
+  "audio_data": "SUQzBAAAAAAAI1RTU0UAAAA...",
+  "audio_url": "/audio/msg_550e8400.mp3"
+}
+```
+
+**Enhanced WSResponse Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `audio_data` | string | Base64-encoded audio (if `enable_tts: true`) |
+| `audio_url` | string | URL to audio file (alternative to audio_data) |
+
+---
+
+#### Testing Methods
+
+##### 1. Testing with curl (REST API)
+
+**Basic TTS Request:**
+```bash
+curl -X POST http://localhost:3001/api/audio/tts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Hello, this is a test message",
+    "voice": "nova",
+    "model": "tts-1"
+  }' \
+  --output test_audio.mp3
+```
+
+**With Different Voice:**
+```bash
+curl -X POST http://localhost:3001/api/audio/tts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "สวัสดีครับ ทดสอบเสียงภาษาไทย",
+    "voice": "onyx",
+    "speed": 0.9
+  }' \
+  --output thai_voice.mp3
+```
+
+**High Quality TTS:**
+```bash
+curl -X POST http://localhost:3001/api/audio/tts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "High quality audio test",
+    "model": "tts-1-hd",
+    "voice": "alloy",
+    "response_format": "flac"
+  }' \
+  --output hq_audio.flac
+```
+
+##### 2. Testing with JavaScript/Fetch (REST API)
+
+```javascript
+async function testTTS() {
+  const response = await fetch('http://localhost:3001/api/audio/tts', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      text: 'Testing text-to-speech API',
+      voice: 'nova',
+      model: 'tts-1'
+    })
+  })
+
+  // Option 1: Get binary audio data
+  const audioBlob = await response.blob()
+  const audioUrl = URL.createObjectURL(audioBlob)
+
+  const audio = new Audio(audioUrl)
+  audio.play()
+
+  // Option 2: Get JSON response with base64
+  const data = await response.json()
+  const audioData = atob(data.audio_data) // decode base64
+  const bytes = new Uint8Array(audioData.length)
+  for (let i = 0; i < audioData.length; i++) {
+    bytes[i] = audioData.charCodeAt(i)
+  }
+  const blob = new Blob([bytes], { type: 'audio/mpeg' })
+  const url = URL.createObjectURL(blob)
+
+  const audioElement = new Audio(url)
+  audioElement.play()
+}
+```
+
+##### 3. Testing with WebSocket (Integrated Chat)
+
+```javascript
+// Connect to WebSocket
+const ws = new WebSocket('ws://localhost:3001/api/chat/stream')
+
+ws.onopen = () => {
+  // Send message with TTS enabled
+  ws.send(JSON.stringify({
+    type: 'message',
+    content: 'Tell me about artificial intelligence',
+    persona_id: 1,
+    enable_tts: true,
+    tts_voice: 'nova'
+  }))
+}
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data)
+
+  if (data.type === 'chunk' && data.done) {
+    // Final message with audio
+    console.log('Message ID:', data.message_id)
+    console.log('Tokens used:', data.tokens_used)
+
+    if (data.audio_data) {
+      // Play audio
+      const audioData = atob(data.audio_data)
+      const bytes = new Uint8Array(audioData.length)
+      for (let i = 0; i < audioData.length; i++) {
+        bytes[i] = audioData.charCodeAt(i)
+      }
+      const blob = new Blob([bytes], { type: 'audio/mpeg' })
+      const audioUrl = URL.createObjectURL(blob)
+
+      const audio = new Audio(audioUrl)
+      audio.play()
+    }
+  } else if (data.type === 'chunk') {
+    // Text streaming
+    console.log('Chunk:', data.content)
+  }
+}
+```
+
+##### 4. Testing with Postman
+
+**Setup:**
+1. Create new POST request to `http://localhost:3001/api/audio/tts`
+2. Set Headers: `Content-Type: application/json`
+3. Set Body (raw JSON):
+```json
+{
+  "text": "Testing with Postman",
+  "voice": "nova",
+  "model": "tts-1"
+}
+```
+4. Click "Send"
+5. In response, click "Save to file" to download audio
+6. Play the downloaded file
+
+**Testing Different Voices:**
+- Create collection with 6 requests (one for each voice)
+- Change `voice` field: alloy, echo, fable, onyx, nova, shimmer
+- Compare audio quality and characteristics
+
+##### 5. Testing with Vue Frontend Component
+
+```vue
+<template>
+  <div>
+    <button @click="testTTS">Test TTS</button>
+    <audio ref="audioPlayer" controls></audio>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+
+const audioPlayer = ref(null)
+
+async function testTTS() {
+  try {
+    const response = await fetch('http://localhost:3001/api/audio/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: 'Vue component test',
+        voice: 'nova'
+      })
+    })
+
+    const audioBlob = await response.blob()
+    const audioUrl = URL.createObjectURL(audioBlob)
+
+    if (audioPlayer.value) {
+      audioPlayer.value.src = audioUrl
+      audioPlayer.value.play()
+    }
+  } catch (error) {
+    console.error('TTS test failed:', error)
+  }
+}
+</script>
+```
+
+---
+
+#### Error Responses
+
+**400 Bad Request** - Missing text
+```json
+{
+  "error": "text is required"
+}
+```
+
+**400 Bad Request** - Text too long
+```json
+{
+  "error": "text exceeds maximum length of 4096 characters"
+}
+```
+
+**400 Bad Request** - Invalid voice
+```json
+{
+  "error": "invalid voice. Allowed: alloy, echo, fable, onyx, nova, shimmer"
+}
+```
+
+**400 Bad Request** - Invalid model
+```json
+{
+  "error": "invalid model. Allowed: tts-1, tts-1-hd"
+}
+```
+
+**400 Bad Request** - Invalid speed
+```json
+{
+  "error": "speed must be between 0.25 and 4.0"
+}
+```
+
+**413 Payload Too Large** - Text too long
+```json
+{
+  "error": "text is too long (max 4096 characters)"
+}
+```
+
+**500 Internal Server Error** - TTS API failure
+```json
+{
+  "error": "failed to generate speech: API error"
+}
+```
+
+**503 Service Unavailable** - OpenAI API unavailable
+```json
+{
+  "error": "TTS service temporarily unavailable"
+}
+```
+
+---
+
+#### Cost Estimation
+
+**Pricing (as of 2024):**
+- `tts-1`: $0.015 per 1,000 characters
+- `tts-1-hd`: $0.030 per 1,000 characters
+
+**Examples:**
+
+| Text Length | Model | Cost |
+|-------------|-------|------|
+| 100 chars | tts-1 | $0.0015 |
+| 500 chars | tts-1 | $0.0075 |
+| 1,000 chars | tts-1 | $0.015 |
+| 500 chars | tts-1-hd | $0.015 |
+| 1,000 chars | tts-1-hd | $0.030 |
+
+**Average AI Response:** ~500 characters = **$0.0075 per response** (tts-1)
+
+---
+
+#### Rate Limiting
+
+**Recommended Limits:**
+- 10 requests per minute per user
+- 1,000 requests per day per user
+- Maximum 4,096 characters per request
+- Maximum 100 concurrent TTS generations
+
+**Headers for Rate Limiting:**
+```
+X-RateLimit-Limit: 10
+X-RateLimit-Remaining: 7
+X-RateLimit-Reset: 1698765432
+```
+
+---
+
+#### Best Practices
+
+1. **Use `tts-1` for most cases** - Good quality, lower cost
+2. **Cache common responses** - Save audio files for repeated text
+3. **Let users opt-in** - Don't enable TTS by default
+4. **Use `opus` format for streaming** - Better for real-time applications
+5. **Implement retry logic** - Handle temporary API failures
+6. **Monitor costs** - Track character usage per user
+7. **Validate text length** - Prevent abuse with length limits
+8. **Use appropriate voice** - Match voice to content type and audience
+
+---
+
+#### Integration Example (Full Flow)
+
+**Frontend: Enable TTS in Chat**
+```javascript
+// In chat store
+const enableTTS = ref(false)
+const selectedVoice = ref('nova')
+
+// Send message with TTS
+function sendMessage(content) {
+  wsConnection.send(JSON.stringify({
+    type: 'message',
+    content: content,
+    persona_id: currentPersonaId.value,
+    enable_tts: enableTTS.value,
+    tts_voice: selectedVoice.value
+  }))
+}
+```
+
+**Backend: Process and Generate Audio**
+```go
+// In WebSocket controller
+if msg.EnableTTS {
+    audioData, err := ctrl.ttsService.TextToSpeech(ctx, fullContent)
+    if err != nil {
+        log.Printf("TTS failed: %v", err)
+    } else {
+        audioBase64 := base64.StdEncoding.EncodeToString(audioData)
+        response.AudioData = audioBase64
+    }
+}
+```
+
+**Frontend: Play Audio Response**
+```javascript
+// In WebSocket handler
+if (data.done && data.audio_data) {
+  const audioBlob = base64ToBlob(data.audio_data, 'audio/mpeg')
+  const audioUrl = URL.createObjectURL(audioBlob)
+  const audio = new Audio(audioUrl)
+  audio.play()
 }
 ```
 

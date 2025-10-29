@@ -19,11 +19,12 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 
 	// Initialize services
 	openaiService := services.NewOpenAIService(cfg)
+	ttsService := services.NewTTSService(cfg)
 
 	// Initialize controllers
 	chatCtrl := controllers.NewChatController(messageRepo, personaRepo, openaiService)
 	personaCtrl := controllers.NewPersonaController(personaRepo, messageRepo)
-	audioCtrl := controllers.NewAudioController(openaiService)
+	audioCtrl := controllers.NewAudioController(openaiService, ttsService)
 	wsCtrl := controllers.NewWebSocketController(messageRepo, personaRepo, openaiService)
 
 	// API group
@@ -48,6 +49,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 
 	// Audio endpoints
 	api.Post("/audio/transcribe", audioCtrl.TranscribeAudio)
+	api.Post("/audio/tts", audioCtrl.TextToSpeech)
 
 	// WebSocket upgrade middleware
 	app.Use("/api/chat/stream", func(c *fiber.Ctx) error {

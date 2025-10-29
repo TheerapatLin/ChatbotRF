@@ -9,6 +9,18 @@
             <p class="text-sm text-gray-500">Powered by OpenAI</p>
           </div>
           <div class="flex items-center gap-3">
+            <!-- New Chat Button -->
+            <button
+              @click="handleNewChat"
+              class="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-all"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+              <span class="text-sm font-medium">แชทใหม่</span>
+            </button>
+
+            <!-- Connection Status -->
             <div class="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg">
               <div
                 :class="[
@@ -34,15 +46,39 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { provide, onMounted } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import MessageList from '@/components/chat/MessageList.vue'
 import MessageInput from '@/components/chat/MessageInput.vue'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { useChatStore } from '@/store/chat'
 
-const { isConnected } = useWebSocket()
+const chatStore = useChatStore()
+const wsConnection = useWebSocket()
+const { isConnected } = wsConnection
 
-onMounted(() => {
+// Provide WebSocket connection to child components
+provide('wsConnection', wsConnection)
+
+const handleNewChat = () => {
+  if (confirm('คุณต้องการเริ่มแชทใหม่ใช่หรือไม่? ข้อความทั้งหมดจะถูกลบ')) {
+    chatStore.clearChat()
+  }
+}
+
+const loadChatHistory = async () => {
+  try {
+    await chatStore.fetchHistory()
+    console.log('Chat history loaded:', chatStore.messages.length, 'messages')
+  } catch (error) {
+    console.error('Failed to load chat history:', error)
+  }
+}
+
+onMounted(async () => {
   console.log('ChatView mounted')
+
+  // Load chat history from API
+  await loadChatHistory()
 })
 </script>
