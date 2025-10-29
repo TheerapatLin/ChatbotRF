@@ -159,3 +159,45 @@ func (s *OpenAIService) TranscribeAudio(file io.Reader, filename string) (*Trans
 		Duration: 0, // Whisper API doesn't return duration
 	}, nil
 }
+
+// CreateStreamingChatCompletion creates a streaming chat completion
+func (s *OpenAIService) CreateStreamingChatCompletion(
+	ctx context.Context,
+	messages []openai.ChatCompletionMessage,
+) (*openai.ChatCompletionStream, error) {
+	// Use default model
+	model := s.config.OpenAIModel
+	if model == "" {
+		model = "gpt-3.5-turbo"
+	}
+
+	// Use default temperature
+	temperature := float32(s.config.OpenAITemperature)
+	if temperature == 0 {
+		temperature = 0.7
+	}
+
+	// Use default max tokens
+	maxTokens := s.config.OpenAIMaxTokens
+	if maxTokens == 0 {
+		maxTokens = 1000
+	}
+
+	// Create streaming request
+	stream, err := s.client.CreateChatCompletionStream(
+		ctx,
+		openai.ChatCompletionRequest{
+			Model:       model,
+			Messages:    messages,
+			Temperature: temperature,
+			MaxTokens:   maxTokens,
+			Stream:      true,
+		},
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create streaming chat completion: %w", err)
+	}
+
+	return stream, nil
+}

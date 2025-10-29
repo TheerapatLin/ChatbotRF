@@ -17,7 +17,14 @@
       "Bash(findstr:*)",
       "Bash(taskkill:*)",
       "Bash(go run:*)",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "Bash(npm create:*)",
+      "Bash(npx create-vite@latest frontend --template vue)",
+      "Bash(mkdir:*)",
+      "Bash(npm init:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run dev:*)",
+      "Bash(timeout /t 5)"
     ],
     "deny": [],
     "ask": []

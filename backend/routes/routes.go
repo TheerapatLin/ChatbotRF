@@ -6,6 +6,7 @@ import (
 	"chatbot/repositories"
 	"chatbot/services"
 
+	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
 )
@@ -23,6 +24,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	chatCtrl := controllers.NewChatController(messageRepo, personaRepo, openaiService)
 	personaCtrl := controllers.NewPersonaController(personaRepo, messageRepo)
 	audioCtrl := controllers.NewAudioController(openaiService)
+	wsCtrl := controllers.NewWebSocketController(messageRepo, personaRepo, openaiService)
 
 	// API group
 	api := app.Group("/api")
@@ -46,4 +48,17 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 
 	// Audio endpoints
 	api.Post("/audio/transcribe", audioCtrl.TranscribeAudio)
+
+	// WebSocket upgrade middleware
+	app.Use("/api/chat/stream", func(c *fiber.Ctx) error {
+		// IsWebSocketUpgrade returns true if the client requested upgrade to the WebSocket protocol
+		if websocket.IsWebSocketUpgrade(c) {
+			c.Locals("allowed", true)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
+
+	// WebSocket endpoint for streaming chat
+	app.Get("/api/chat/stream", websocket.New(wsCtrl.HandleStreamingChat))
 }
