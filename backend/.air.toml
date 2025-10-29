@@ -1,0 +1,18 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -trimpath -o tmp/backend-app.exe ."
+bin = "tmp/backend-app.exe"
+include_ext = ["go", "tpl", "tmpl", "html", "env", "yaml", "yml"]
+exclude_dir = ["tmp", ".git", "vendor"]
+exclude_file = ["**/*_test.go"]
+exclude_unchanged = true
+follow_symlink = false
+log = "air.build.log"
+
+[log]
+time = true
+
+[screen]
+clear_on_rebuild = true

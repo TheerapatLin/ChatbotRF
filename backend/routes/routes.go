@@ -1,0 +1,49 @@
+package routes
+
+import (
+	"chatbot/config"
+	"chatbot/controllers"
+	"chatbot/repositories"
+	"chatbot/services"
+
+	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
+)
+
+// SetupRoutes sets up all application routes
+func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
+	// Initialize repositories
+	messageRepo := repositories.NewMessageRepository(db)
+	personaRepo := repositories.NewPersonaRepository(db)
+
+	// Initialize services
+	openaiService := services.NewOpenAIService(cfg)
+
+	// Initialize controllers
+	chatCtrl := controllers.NewChatController(messageRepo, personaRepo, openaiService)
+	personaCtrl := controllers.NewPersonaController(personaRepo, messageRepo)
+	audioCtrl := controllers.NewAudioController(openaiService)
+
+	// API group
+	api := app.Group("/api")
+
+	// Health check endpoint
+	api.Get("/health", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status":  "ok",
+			"message": "ChatBot API is running",
+			"env":     cfg.AppEnv,
+		})
+	})
+
+	// Personas endpoints
+	api.Get("/personas", personaCtrl.GetAllPersonas)
+	api.Get("/personas/:id", personaCtrl.GetPersonaByID)
+
+	// Chat endpoints
+	api.Post("/chat", chatCtrl.HandleChat)
+	api.Get("/chat/history", chatCtrl.GetChatHistory)
+
+	// Audio endpoints
+	api.Post("/audio/transcribe", audioCtrl.TranscribeAudio)
+}

@@ -1,0 +1,72 @@
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+
+# Database
+*.sql
+*.db
+*.sqlite
+*.sqlite3
+database/backups/
+
+# Docker volumes (data will persist in Docker volumes)
+postgres_data/
+pgadmin_data/
+redis_data/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/vendor/
+/backend/tmp/
+/backend/air_tmp/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Node.js / Frontend
+node_modules/
+/frontend/dist/
+/frontend/.vite/
+/frontend/.nuxt/
+/frontend/.output/
+/frontend/.cache/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# SSL Certificates (if any)
+*.pem
+*.key
+*.crt
+*.csr
+
+# Backup files
+*.bak
+*.backup
