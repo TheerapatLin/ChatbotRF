@@ -54,6 +54,7 @@ type WSResponse struct {
 // HandleStreamingChat handles WebSocket connections for streaming chat
 func (ctrl *WebSocketController) HandleStreamingChat(c *websocket.Conn) {
 	log.Printf("New WebSocket connection from %s", c.RemoteAddr())
+	// ***c.RemoteAddr() คือ ฟังก์ชันที่ใช้ดึง IP address ของ client (ผู้ที่ส่ง request เข้ามา)
 
 	// Track connection context for cancellation
 	ctx, cancel := context.WithCancel(context.Background())
@@ -204,6 +205,7 @@ streamDone:
 }
 
 // sendChunk sends a content chunk to the client
+// ส่งข้อมูลเป็นส่วนๆ (chunk)
 func (ctrl *WebSocketController) sendChunk(c *websocket.Conn, content string, done bool) error {
 	return c.WriteJSON(WSResponse{
 		Type:    "chunk",

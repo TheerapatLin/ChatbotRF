@@ -39,8 +39,15 @@ func (ctrl *AudioController) TranscribeAudio(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "audio file is required",
+			"details": err.Error(),
 		})
 	}
+
+	// Log incoming request for debugging
+	println("📥 Transcribe request received:")
+	println("   Filename:", file.Filename)
+	println("   Size:", file.Size, "bytes")
+	println("   Content-Type:", file.Header.Get("Content-Type"))
 
 	// Validate file size (25 MB max)
 	const maxFileSize = 25 * 1024 * 1024 // 25 MB in bytes
@@ -50,22 +57,36 @@ func (ctrl *AudioController) TranscribeAudio(c *fiber.Ctx) error {
 		})
 	}
 
+	// Validate file size is not zero
+	if file.Size == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "audio file is empty",
+		})
+	}
+
 	// Open the uploaded file
 	fileData, err := file.Open()
 	if err != nil {
+		println("❌ Failed to open file:", err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to read uploaded file",
+			"details": err.Error(),
 		})
 	}
 	defer fileData.Close()
 
 	// Call OpenAI Whisper service
+	println("🔄 Calling OpenAI Whisper API...")
 	transcription, err := ctrl.openaiService.TranscribeAudio(fileData, file.Filename)
 	if err != nil {
+		println("❌ Transcription failed:", err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to transcribe audio: " + err.Error(),
+			"error": "Failed to transcribe audio",
+			"details": err.Error(),
 		})
 	}
+
+	println("✅ Transcription successful:", transcription.Text)
 
 	// Create response
 	response := TranscribeResponse{

@@ -51,16 +51,16 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	api.Post("/audio/transcribe", audioCtrl.TranscribeAudio)
 	api.Post("/audio/tts", audioCtrl.TextToSpeech)
 
-	// WebSocket upgrade middleware
+	// WebSocket upgrade middleware: ตรวจสอบ request จาก client
 	app.Use("/api/chat/stream", func(c *fiber.Ctx) error {
 		// IsWebSocketUpgrade returns true if the client requested upgrade to the WebSocket protocol
 		if websocket.IsWebSocketUpgrade(c) {
-			c.Locals("allowed", true)
-			return c.Next()
+			c.Locals("allowed", true) // อนุญาติให้ใช้ WebSocket
+			return c.Next() // ส่งต่อไปยัง WebSocket Endpoint
 		}
 		return fiber.ErrUpgradeRequired
 	})
 
-	// WebSocket endpoint for streaming chat
+	// WebSocket endpoint for streaming chat: Upgrade HTTP เป็น WebSocket
 	app.Get("/api/chat/stream", websocket.New(wsCtrl.HandleStreamingChat))
 }

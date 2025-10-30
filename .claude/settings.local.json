@@ -27,7 +27,8 @@
       "Bash(timeout /t 5)",
       "Bash(timeout:*)",
       "Bash(pkill:*)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(go list:*)"
     ],
     "deny": [],
     "ask": []

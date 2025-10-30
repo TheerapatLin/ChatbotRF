@@ -157,6 +157,7 @@ func (s *OpenAIService) TranscribeAudio(file io.Reader, filename string) (*Trans
 		Text:     resp.Text,
 		Language: resp.Language,
 		Duration: 0, // Whisper API doesn't return duration
+		// Duration คือ ระยะเวลา (ความยาว) ของเสียงที่ทำการถอดคำพูด (transcription)
 	}, nil
 }
 
@@ -172,6 +173,7 @@ func (s *OpenAIService) CreateStreamingChatCompletion(
 	}
 
 	// Use default temperature
+	// temperature คือ ค่าพารามิเตอร์ที่ควบคุมความ “สุ่ม” (randomness) ของคำตอบจากโมเดล AI (เช่น GPT)
 	temperature := float32(s.config.OpenAITemperature)
 	if temperature == 0 {
 		temperature = 0.7
