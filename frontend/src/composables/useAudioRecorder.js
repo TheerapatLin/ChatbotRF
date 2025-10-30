@@ -50,6 +50,7 @@ export function useAudioRecorder() {
 
         if (stream.value) {
           stream.value.getTracks().forEach(track => track.stop())
+          stream.value = null // Clear stream reference
         }
 
         isRecording.value = false
@@ -72,6 +73,7 @@ export function useAudioRecorder() {
 
       if (stream.value) {
         stream.value.getTracks().forEach(track => track.stop())
+        stream.value = null // Clear stream reference
       }
 
       audioChunks.value = []
@@ -83,6 +85,7 @@ export function useAudioRecorder() {
 
   return {
     isRecording,
+    stream,
     startRecording,
     stopRecording,
     cancelRecording

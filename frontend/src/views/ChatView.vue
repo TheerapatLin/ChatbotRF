@@ -1,6 +1,7 @@
 <template>
   <AppLayout>
-    <div class="flex flex-col h-full">
+    <!-- Text Mode: Traditional Chat Interface -->
+    <div v-if="chatMode === 'text'" class="flex flex-col h-full">
       <!-- Header -->
       <header class="bg-white border-b border-gray-200 px-6 py-4">
         <div class="flex items-center justify-between">
@@ -42,20 +43,27 @@
       <!-- Input Area -->
       <MessageInput />
     </div>
+
+    <!-- Speech Mode: Speech-to-Speech Interface -->
+    <SpeechView v-else-if="chatMode === 'speech'" />
   </AppLayout>
 </template>
 
 <script setup>
-import { provide, onMounted } from 'vue'
+import { provide, onMounted, computed } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import MessageList from '@/components/chat/MessageList.vue'
 import MessageInput from '@/components/chat/MessageInput.vue'
+import SpeechView from './SpeechView.vue'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useChatStore } from '@/store/chat'
 
 const chatStore = useChatStore()
 const wsConnection = useWebSocket()
 const { isConnected } = wsConnection
+
+// Get chat mode from store
+const chatMode = computed(() => chatStore.chatMode)
 
 // Provide WebSocket connection to child components
 provide('wsConnection', wsConnection)
@@ -76,9 +84,11 @@ const loadChatHistory = async () => {
 }
 
 onMounted(async () => {
-  console.log('ChatView mounted')
+  console.log('ChatView mounted, mode:', chatMode.value)
 
-  // Load chat history from API
-  await loadChatHistory()
+  // Load chat history from API only in text mode
+  if (chatMode.value === 'text') {
+    await loadChatHistory()
+  }
 })
 </script>

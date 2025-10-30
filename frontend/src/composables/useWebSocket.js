@@ -110,6 +110,7 @@ export function useWebSocket() {
   })
 
   return {
+    ws,
     isConnected,
     sendMessage,
     disconnect,
