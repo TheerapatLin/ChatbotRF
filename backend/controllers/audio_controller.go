@@ -43,12 +43,6 @@ func (ctrl *AudioController) TranscribeAudio(c *fiber.Ctx) error {
 		})
 	}
 
-	// Log incoming request for debugging
-	println("📥 Transcribe request received:")
-	println("   Filename:", file.Filename)
-	println("   Size:", file.Size, "bytes")
-	println("   Content-Type:", file.Header.Get("Content-Type"))
-
 	// Validate file size (25 MB max)
 	const maxFileSize = 25 * 1024 * 1024 // 25 MB in bytes
 	if file.Size > maxFileSize {

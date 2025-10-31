@@ -100,7 +100,7 @@
 ### External Services
 
 - **OpenAI API**
-  - GPT-3.5-turbo / GPT-4 - Chat completions (sync & streaming)
+  - gpt-4o-mini / GPT-4 - Chat completions (sync & streaming)
   - Whisper API - Audio transcription
 - **Docker & Docker Compose** - Container orchestration
 
@@ -163,7 +163,7 @@ APP_NAME=ChatBotAPI
 
 # OpenAI API (⚠️ จำเป็นต้องมี!)
 OPENAI_API_KEY=sk-proj-YOUR_ACTUAL_API_KEY_HERE
-OPENAI_MODEL=gpt-3.5-turbo
+OPENAI_MODEL=gpt-4o-mini
 OPENAI_MAX_TOKENS=2000
 OPENAI_TEMPERATURE=0.7
 
@@ -341,7 +341,7 @@ Content-Type: application/json
     "icon": "🤖"
   },
   "tokens_used": 156,
-  "model": "gpt-3.5-turbo",
+  "model": "gpt-4o-mini",
   "timestamp": "2025-10-29T10:30:00Z"
 }
 ```

@@ -4,7 +4,7 @@
 >
 > Base URL: `http://localhost:3000/api`
 >
-> Version: 1.0.0
+> Version: 1.1.0 (Updated: 2025-10-31)
 
 ---
 
@@ -16,6 +16,7 @@
 - [Health Check](#health-check)
 - [Chat Endpoints](#chat-endpoints)
 - [Persona Endpoints](#persona-endpoints)
+- [File Analysis Endpoints](#file-analysis-endpoints) ⭐ **NEW**
 - [Audio Endpoints](#audio-endpoints)
 - [WebSocket API](#websocket-api)
 - [Rate Limiting](#rate-limiting)
@@ -402,6 +403,548 @@ curl http://localhost:3000/api/personas/2
   "error": "persona with id 99 not found"
 }
 ```
+
+---
+
+## 📁 File Analysis Endpoints
+
+### 1. Upload and Analyze File
+
+`POST /api/file/analyze`
+
+อัพโหลดไฟล์เพื่อให้ AI วิเคราะห์เนื้อหา รองรับไฟล์หลายประเภท
+
+#### สรุปขั้นตอนการทำงาน
+
+```
+User Upload → Backend Validation → File Parsing → Text Extraction → OpenAI API → Analysis Result
+```
+
+#### รายละเอียดแต่ละขั้นตอน
+
+##### ขั้นตอนที่ 1: รับไฟล์จาก User (File Upload)
+
+**วิธีการ**: ใช้ `multipart/form-data` upload
+
+**ไฟล์ที่รองรับ**:
+
+| File Type | Extensions | Max Size | Description |
+|-----------|-----------|----------|-------------|
+| **Documents** | `.txt`, `.md` | 10 MB | Plain text, Markdown |
+| **Office** | `.pdf`, `.docx`, `.xlsx`, `.pptx` | 25 MB | PDF, Word, Excel, PowerPoint |
+| **Images** | `.jpg`, `.png`, `.gif`, `.webp` | 20 MB | Image files (with OCR) |
+| **Code** | `.js`, `.py`, `.go`, `.java`, etc. | 5 MB | Source code files |
+| **Data** | `.json`, `.xml`, `.csv` | 10 MB | Structured data files |
+
+##### ขั้นตอนที่ 2: Backend Validation
+
+**การตรวจสอบ**:
+- ตรวจสอบชนิดไฟล์ (MIME type validation)
+- ตรวจสอบขนาดไฟล์ (Size validation)
+- ตรวจสอบ malware/virus (Optional - Security scan)
+- ตรวจสอบ encoding (UTF-8, ASCII, etc.)
+
+**Implementation**:
+```go
+// services/file_validator.go
+func ValidateFile(file *multipart.FileHeader) error {
+    // Check file size
+    if file.Size > maxFileSize {
+        return errors.New("file too large")
+    }
+
+    // Check MIME type
+    allowedTypes := []string{"application/pdf", "text/plain", "image/jpeg", ...}
+    if !contains(allowedTypes, file.Header.Get("Content-Type")) {
+        return errors.New("unsupported file type")
+    }
+
+    return nil
+}
+```
+
+##### ขั้นตอนที่ 3: File Parsing (แยกข้อมูลจากไฟล์)
+
+**สำหรับแต่ละประเภทไฟล์**:
+
+**A. Plain Text Files** (`.txt`, `.md`, `.csv`):
+```go
+// ง่ายที่สุด - อ่านเป็น string โดยตรง
+content, err := io.ReadAll(file)
+text := string(content)
+```
+
+**B. PDF Files**:
+```go
+// ใช้ library: github.com/ledongthuc/pdf
+import "github.com/ledongthuc/pdf"
+
+func ExtractPDFText(file io.Reader) (string, error) {
+    pdfReader, err := pdf.NewReader(file, size)
+    if err != nil {
+        return "", err
+    }
+
+    var text strings.Builder
+    for pageNum := 1; pageNum <= pdfReader.NumPage(); pageNum++ {
+        page := pdfReader.Page(pageNum)
+        text.WriteString(page.GetPlainText())
+    }
+
+    return text.String(), nil
+}
+```
+
+**C. Word Documents** (`.docx`):
+```go
+// ใช้ library: github.com/nguyenthenguyen/docx
+import "github.com/nguyenthenguyen/docx"
+
+func ExtractDocxText(file io.Reader) (string, error) {
+    doc, err := docx.ReadDocxFile(file)
+    if err != nil {
+        return "", err
+    }
+    defer doc.Close()
+
+    return doc.Editable().GetContent(), nil
+}
+```
+
+**D. Excel Files** (`.xlsx`):
+```go
+// ใช้ library: github.com/xuri/excelize/v2
+import "github.com/xuri/excelize/v2"
+
+func ExtractExcelText(file io.Reader) (string, error) {
+    f, err := excelize.OpenReader(file)
+    if err != nil {
+        return "", err
+    }
+    defer f.Close()
+
+    var text strings.Builder
+    for _, sheetName := range f.GetSheetList() {
+        rows, _ := f.GetRows(sheetName)
+        for _, row := range rows {
+            text.WriteString(strings.Join(row, ", ") + "\n")
+        }
+    }
+
+    return text.String(), nil
+}
+```
+
+**E. Images** (`.jpg`, `.png`, `.gif`):
+```go
+// ใช้ OpenAI Vision API
+// ส่งรูปภาพไปให้ GPT-4 Vision วิเคราะห์
+func AnalyzeImage(file io.Reader) (string, error) {
+    // Encode image to base64
+    imageData, _ := io.ReadAll(file)
+    base64Image := base64.StdEncoding.EncodeToString(imageData)
+
+    // Call OpenAI Vision API
+    resp, err := client.CreateChatCompletion(
+        ctx,
+        openai.ChatCompletionRequest{
+            Model: "gpt-4-vision-preview",
+            Messages: []openai.ChatCompletionMessage{
+                {
+                    Role: "user",
+                    MultiContent: []openai.ChatMessagePart{
+                        {
+                            Type: "text",
+                            Text: "Describe this image in detail",
+                        },
+                        {
+                            Type: "image_url",
+                            ImageURL: &openai.ChatMessageImageURL{
+                                URL: "data:image/jpeg;base64," + base64Image,
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    return resp.Choices[0].Message.Content, nil
+}
+```
+
+**F. JSON/XML Files**:
+```go
+// แปลงเป็น formatted text
+func FormatJSONForAI(jsonData []byte) (string, error) {
+    var data interface{}
+    json.Unmarshal(jsonData, &data)
+
+    // Pretty print
+    formatted, _ := json.MarshalIndent(data, "", "  ")
+    return string(formatted), nil
+}
+```
+
+##### ขั้นตอนที่ 4: Text Extraction & Chunking
+
+**ปัญหา**: ไฟล์ขนาดใหญ่เกินขีด max tokens ของ OpenAI
+
+**วิธีแก้**: แบ่ง text เป็น chunks
+
+```go
+// services/text_chunker.go
+func ChunkText(text string, maxChunkSize int) []string {
+    words := strings.Fields(text)
+    var chunks []string
+    var currentChunk strings.Builder
+
+    for _, word := range words {
+        if currentChunk.Len() + len(word) > maxChunkSize {
+            chunks = append(chunks, currentChunk.String())
+            currentChunk.Reset()
+        }
+        currentChunk.WriteString(word + " ")
+    }
+
+    if currentChunk.Len() > 0 {
+        chunks = append(chunks, currentChunk.String())
+    }
+
+    return chunks
+}
+```
+
+##### ขั้นตอนที่ 5: ส่งไปยัง OpenAI API
+
+**วิธีที่ 1: Chat Completion API** (สำหรับไฟล์ทั่วไป)
+
+```go
+func AnalyzeTextWithAI(text string, prompt string) (string, error) {
+    resp, err := openaiClient.CreateChatCompletion(
+        context.Background(),
+        openai.ChatCompletionRequest{
+            Model: "gpt-4-turbo-preview",
+            Messages: []openai.ChatCompletionMessage{
+                {
+                    Role: "system",
+                    Content: "You are a document analysis expert.",
+                },
+                {
+                    Role: "user",
+                    Content: fmt.Sprintf("%s\n\nDocument:\n%s", prompt, text),
+                },
+            },
+        },
+    )
+
+    return resp.Choices[0].Message.Content, nil
+}
+```
+
+**วิธีที่ 2: Assistant API** (สำหรับไฟล์ซับซ้อน)
+
+```go
+// 1. Upload file to OpenAI
+file, err := openaiClient.CreateFile(
+    context.Background(),
+    openai.FileRequest{
+        FileName: filename,
+        FilePath: filepath,
+        Purpose:  "assistants",
+    },
+)
+
+// 2. Create Assistant
+assistant, err := openaiClient.CreateAssistant(
+    context.Background(),
+    openai.AssistantRequest{
+        Model: "gpt-4-turbo-preview",
+        Tools: []openai.AssistantTool{
+            {Type: "retrieval"},
+        },
+        FileIDs: []string{file.ID},
+    },
+)
+
+// 3. Create Thread and Run
+thread, _ := openaiClient.CreateThread(context.Background(), ...)
+run, _ := openaiClient.CreateRun(context.Background(), ...)
+
+// 4. Wait for completion and get response
+```
+
+##### ขั้นตอนที่ 6: รับและประมวลผลคำตอบ
+
+```go
+type FileAnalysisResponse struct {
+    FileID      string    `json:"file_id"`
+    FileName    string    `json:"filename"`
+    FileType    string    `json:"file_type"`
+    FileSize    int64     `json:"file_size"`
+    Analysis    string    `json:"analysis"`
+    Summary     string    `json:"summary"`
+    KeyPoints   []string  `json:"key_points"`
+    Entities    []string  `json:"entities,omitempty"`
+    Sentiment   string    `json:"sentiment,omitempty"`
+    Language    string    `json:"language"`
+    TokensUsed  int       `json:"tokens_used"`
+    ProcessTime float64   `json:"process_time_ms"`
+    Timestamp   time.Time `json:"timestamp"`
+}
+```
+
+---
+
+#### Request
+
+**Headers:**
+```
+Content-Type: multipart/form-data
+```
+
+**Body (Form Data):**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `file` | file | ✅ Yes | ไฟล์ที่ต้องการวิเคราะห์ |
+| `analysis_type` | string | ❌ No | ประเภทการวิเคราะห์: `summary`, `detail`, `qa`, `extract` |
+| `prompt` | string | ❌ No | Custom prompt สำหรับการวิเคราะห์ |
+| `language` | string | ❌ No | ภาษาที่ต้องการให้ตอบ (default: `th`) |
+
+**Analysis Types:**
+
+| Type | Description | Output |
+|------|-------------|--------|
+| `summary` | สรุปเนื้อหาโดยรวม | ข้อความสรุปสั้นๆ |
+| `detail` | วิเคราะห์รายละเอียดทั้งหมด | การวิเคราะห์แบบละเอียด |
+| `qa` | ตั้งคำถามและตอบ | รายการคำถาม-คำตอบ |
+| `extract` | แยกข้อมูลสำคัญ | Entities, dates, numbers, etc. |
+
+#### Response
+
+**Status**: `200 OK`
+
+```json
+{
+  "file_id": "file_abc123",
+  "filename": "report.pdf",
+  "file_type": "application/pdf",
+  "file_size": 1024000,
+  "analysis": "เอกสารนี้เป็นรายงานประจำปี 2024 ที่ครอบคลุมผลการดำเนินงาน...",
+  "summary": "รายงานแสดงการเติบโตของรายได้ 25% และกำไรสุทธิ 15%",
+  "key_points": [
+    "รายได้เพิ่มขึ้น 25% จากปีก่อน",
+    "กำไรสุทธิ 500 ล้านบาท",
+    "ขยายสาขาใหม่ 10 แห่ง"
+  ],
+  "entities": [
+    "บริษัท ABC จำกัด",
+    "500 ล้านบาท",
+    "2024"
+  ],
+  "sentiment": "positive",
+  "language": "th",
+  "tokens_used": 1250,
+  "process_time_ms": 3500.5,
+  "timestamp": "2025-10-29T14:30:00Z"
+}
+```
+
+#### Example Requests
+
+**1. วิเคราะห์ PDF:**
+```bash
+curl -X POST http://localhost:3000/api/file/analyze \
+  -F "file=@report.pdf" \
+  -F "analysis_type=summary"
+```
+
+**2. วิเคราะห์รูปภาพ:**
+```bash
+curl -X POST http://localhost:3000/api/file/analyze \
+  -F "file=@diagram.png" \
+  -F "analysis_type=detail" \
+  -F "prompt=อธิบายไดอะแกรมนี้และบอกขั้นตอนการทำงาน"
+```
+
+**3. วิเคราะห์ Excel:**
+```bash
+curl -X POST http://localhost:3000/api/file/analyze \
+  -F "file=@sales_data.xlsx" \
+  -F "analysis_type=extract" \
+  -F "prompt=สรุปยอดขายรายเดือนและหาค่าเฉลี่ย"
+```
+
+**4. JavaScript/Fetch:**
+```javascript
+const formData = new FormData()
+formData.append('file', fileInput.files[0])
+formData.append('analysis_type', 'summary')
+formData.append('language', 'th')
+
+const response = await fetch('http://localhost:3000/api/file/analyze', {
+  method: 'POST',
+  body: formData
+})
+
+const result = await response.json()
+console.log('Analysis:', result.analysis)
+console.log('Key Points:', result.key_points)
+```
+
+#### Error Responses
+
+**400 Bad Request** - No file uploaded
+```json
+{
+  "error": "file is required"
+}
+```
+
+**413 Payload Too Large**
+```json
+{
+  "error": "file size exceeds maximum allowed (25MB)"
+}
+```
+
+**415 Unsupported Media Type**
+```json
+{
+  "error": "unsupported file type. Allowed: pdf, docx, xlsx, txt, png, jpg, etc."
+}
+```
+
+**422 Unprocessable Entity** - File parsing failed
+```json
+{
+  "error": "failed to parse file: corrupted or invalid format"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "error": "failed to analyze file: OpenAI API error"
+}
+```
+
+---
+
+### 2. Get File Analysis History
+
+`GET /api/file/history`
+
+ดึงประวัติการวิเคราะห์ไฟล์ที่ผ่านมา
+
+#### Request
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | integer | 20 | จำนวนรายการ (max 100) |
+| `offset` | integer | 0 | เริ่มจากรายการที่ |
+| `file_type` | string | all | กรองตามประเภทไฟล์ |
+
+#### Response
+
+```json
+{
+  "files": [
+    {
+      "file_id": "file_abc123",
+      "filename": "report.pdf",
+      "file_type": "application/pdf",
+      "analysis_type": "summary",
+      "created_at": "2025-10-29T14:30:00Z"
+    }
+  ],
+  "total": 15,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+---
+
+### 3. Re-analyze File
+
+`POST /api/file/:file_id/reanalyze`
+
+วิเคราะห์ไฟล์ที่เคยอัพโหลดแล้วอีกครั้งด้วย prompt ใหม่
+
+#### Request
+
+```json
+{
+  "prompt": "วิเคราะห์แนวโน้มการเติบโตของบริษัท",
+  "analysis_type": "detail"
+}
+```
+
+#### Response
+
+เหมือนกับ `/api/file/analyze`
+
+---
+
+### ขั้นตอนการ Implementation
+
+#### Phase 1: Basic Text File Support (Week 1)
+- [ ] รองรับ `.txt`, `.md` files
+- [ ] Basic validation
+- [ ] Simple OpenAI integration
+- [ ] Save to database
+
+#### Phase 2: Document Support (Week 2)
+- [ ] รองรับ PDF files
+- [ ] รองรับ Word (.docx)
+- [ ] รองรับ Excel (.xlsx)
+- [ ] Text chunking สำหรับไฟล์ใหญ่
+
+#### Phase 3: Image Analysis (Week 3)
+- [ ] รองรับ image files (jpg, png, gif)
+- [ ] OpenAI Vision API integration
+- [ ] OCR สำหรับ text extraction จาก images
+
+#### Phase 4: Advanced Features (Week 4)
+- [ ] File history tracking
+- [ ] Re-analysis capability
+- [ ] Batch file processing
+- [ ] Custom analysis templates
+
+---
+
+### Dependencies Required
+
+```bash
+# Go dependencies
+go get github.com/ledongthuc/pdf          # PDF parsing
+go get github.com/nguyenthenguyen/docx    # Word documents
+go get github.com/xuri/excelize/v2        # Excel files
+go get github.com/h2non/filetype          # File type detection
+```
+
+---
+
+### Cost Estimation
+
+**Pricing Factors:**
+- Input tokens: $0.01 per 1K tokens (GPT-4 Turbo)
+- Output tokens: $0.03 per 1K tokens
+- Vision API: $0.01 per image
+
+**Examples:**
+
+| File Type | Size | Est. Tokens | Est. Cost |
+|-----------|------|-------------|-----------|
+| Small PDF | 5 pages | 2,000 | $0.02 |
+| Medium PDF | 20 pages | 8,000 | $0.08 |
+| Large PDF | 100 pages | 40,000 | $0.40 |
+| Image | 1 image | 1,000 | $0.01 |
+| Excel | 1000 rows | 5,000 | $0.05 |
 
 ---
 
@@ -1551,14 +2094,26 @@ testChat()
 
 ## 🔄 Changelog
 
+### Version 1.1.0 (2025-10-31) - **File Analysis Update**
+- ⭐ **NEW**: File Analysis Endpoints documentation
+  - 📁 Upload and Analyze File endpoint (`POST /api/file/analyze`)
+  - 📊 Detailed implementation steps (6 phases)
+  - 🔧 Code examples for PDF, Word, Excel, Image parsing
+  - 💡 OpenAI Vision API integration guide
+  - 📈 Cost estimation and dependencies
+- ✅ File history endpoint (`GET /api/file/history`)
+- ✅ Re-analyze file endpoint (`POST /api/file/:file_id/reanalyze`)
+- 📝 Implementation phases (Week 1-4 roadmap)
+
 ### Version 1.0.0 (2025-10-28)
 - ✅ Initial API documentation
 - ✅ Health check endpoint
 - ✅ Chat endpoints (sync)
 - ✅ Persona endpoints
-- ⏳ Audio transcription endpoint (planned)
-- ⏳ WebSocket streaming (planned)
-- ⏳ Chat history endpoint (planned)
+- ✅ Audio transcription endpoint
+- ✅ Text-to-Speech endpoint
+- ✅ WebSocket streaming
+- ✅ Chat history endpoint
 
 ---
 
@@ -1573,7 +2128,8 @@ testChat()
 
 ---
 
-**📅 Last Updated**: 2025-10-28
-**📝 Version**: 1.0.0
+**📅 Last Updated**: 2025-10-31
+**📝 Version**: 1.1.0
 **🔗 Base URL**: http://localhost:3000/api
+**✨ What's New**: File Analysis API - รองรับการวิเคราะห์ไฟล์ PDF, Word, Excel, Images และอื่นๆ
 **📧 Contact**: [Your Email]

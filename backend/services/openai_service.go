@@ -169,7 +169,7 @@ func (s *OpenAIService) CreateStreamingChatCompletion(
 	// Use default model
 	model := s.config.OpenAIModel
 	if model == "" {
-		model = "gpt-3.5-turbo"
+		model = "gpt-4o-mini"
 	}
 
 	// Use default temperature
@@ -202,4 +202,9 @@ func (s *OpenAIService) CreateStreamingChatCompletion(
 	}
 
 	return stream, nil
+}
+
+// GetClient returns the OpenAI client
+func (s *OpenAIService) GetClient() *openai.Client {
+	return s.client
 }

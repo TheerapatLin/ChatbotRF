@@ -28,7 +28,10 @@
       "Bash(timeout:*)",
       "Bash(pkill:*)",
       "Bash(kill:*)",
-      "Bash(go list:*)"
+      "Bash(go list:*)",
+      "Bash(start /B chatbot.exe)",
+      "Bash(go vet:*)",
+      "Bash(staticcheck:*)"
     ],
     "deny": [],
     "ask": []

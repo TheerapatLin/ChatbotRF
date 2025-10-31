@@ -20,12 +20,14 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	// Initialize services
 	openaiService := services.NewOpenAIService(cfg)
 	ttsService := services.NewTTSService(cfg)
+	fileService := services.NewFileService(openaiService.GetClient())
 
 	// Initialize controllers
 	chatCtrl := controllers.NewChatController(messageRepo, personaRepo, openaiService)
 	personaCtrl := controllers.NewPersonaController(personaRepo, messageRepo)
 	audioCtrl := controllers.NewAudioController(openaiService, ttsService)
 	wsCtrl := controllers.NewWebSocketController(messageRepo, personaRepo, openaiService)
+	fileCtrl := controllers.NewFileController(fileService)
 
 	// API group
 	api := app.Group("/api")
@@ -50,6 +52,11 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	// Audio endpoints
 	api.Post("/audio/transcribe", audioCtrl.TranscribeAudio)
 	api.Post("/audio/tts", audioCtrl.TextToSpeech)
+
+	// File analysis endpoints
+	api.Post("/file/analyze", fileCtrl.AnalyzeFile)
+	api.Get("/file/history", fileCtrl.GetFileHistory)
+	api.Post("/file/:file_id/reanalyze", fileCtrl.ReanalyzeFile)
 
 	// WebSocket upgrade middleware: ตรวจสอบ request จาก client
 	app.Use("/api/chat/stream", func(c *fiber.Ctx) error {

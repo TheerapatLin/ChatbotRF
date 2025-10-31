@@ -64,7 +64,7 @@ func LoadConfig() *Config {
 
 		// OpenAI
 		OpenAIAPIKey:      getEnv("OPENAI_API_KEY", ""),
-		OpenAIModel:       getEnv("OPENAI_MODEL", "gpt-3.5-turbo"),
+		OpenAIModel:       getEnv("OPENAI_MODEL", "gpt-4o-mini"),
 		OpenAIMaxTokens:   maxTokens,
 		OpenAITemperature: temperature,
 
