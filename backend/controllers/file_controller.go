@@ -4,8 +4,10 @@ import (
 	"chatbot/models"
 	"chatbot/repositories"
 	"chatbot/services"
+	"chatbot/utils"
 	"fmt"
 	"log"
+	"mime/multipart"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -40,42 +42,19 @@ type AnalyzeFileRequest struct {
 
 // AnalyzeFile handles POST /api/file/analyze endpoint
 func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
-	// Get file from multipart form
-	file, err := c.FormFile("file")
+	// 1. Parse and validate file upload
+	file, analysisType, prompt, language, err := ctrl.parseFileRequest(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "file is required",
-		})
+		return err
 	}
 
-	// Get optional parameters
-	analysisType := c.FormValue("analysis_type")
-	if analysisType == "" {
-		analysisType = "summary" // default
+	// 2. Handle image files with Vision API
+	contentType := file.Header.Get("Content-Type")
+	if strings.Contains(contentType, "image/") {
+		return ctrl.analyzeImageFile(c, file, contentType, prompt, language)
 	}
 
-	// Validate analysis type
-	validTypes := []string{"summary", "detail", "qa", "extract"}
-	isValidType := false
-	for _, vt := range validTypes {
-		if analysisType == vt {
-			isValidType = true
-			break
-		}
-	}
-	if !isValidType {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid analysis_type. Allowed: summary, detail, qa, extract",
-		})
-	}
-
-	prompt := c.FormValue("prompt")
-	language := c.FormValue("language")
-	if language == "" {
-		language = "th" // default to Thai
-	}
-
-	// Build request
+	// 3. Analyze text-based file
 	req := services.FileAnalysisRequest{
 		File:         file,
 		AnalysisType: analysisType,
@@ -83,74 +62,119 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 		Language:     language,
 	}
 
-	// Handle image files separately using Vision API
-	contentType := file.Header.Get("Content-Type")
-	if strings.Contains(contentType, "image/") {
-		// Open file
-		fileData, err := file.Open()
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "failed to open file",
-			})
-		}
-		defer fileData.Close()
-
-		// Analyze image
-		analysis, err := ctrl.fileService.AnalyzeImage(c.Context(), fileData, file.Filename, prompt)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "failed to analyze image: " + err.Error(),
-			})
-		}
-
-		// Build response for image
-		response := services.FileAnalysisResponse{
-			FileID:      generateFileID(),
-			FileName:    file.Filename,
-			FileType:    contentType,
-			FileSize:    file.Size,
-			Analysis:    analysis,
-			Summary:     extractFirstSentence(analysis),
-			KeyPoints:   []string{},
-			Language:    language,
-			TokensUsed:  0, // Not available for Vision API in this implementation
-			ProcessTime: 0,
-		}
-
-		return c.Status(fiber.StatusOK).JSON(response)
-	}
-
-	// Analyze file with regular text analysis
 	result, err := ctrl.fileService.AnalyzeFile(c.Context(), req)
 	if err != nil {
-		// Check error type for appropriate status code
-		errMsg := err.Error()
+		return ctrl.handleAnalysisError(c, err)
+	}
 
-		if strings.Contains(errMsg, "unsupported file type") {
-			return c.Status(fiber.StatusUnsupportedMediaType).JSON(fiber.Map{
-				"error": err.Error(),
-			})
+	// 4. Save to database
+	if err := ctrl.saveFileAnalysis(result, analysisType, prompt, language); err != nil {
+		log.Printf("⚠️  Failed to save file analysis to database: %v", err)
+	}
+
+	return utils.SuccessJSON(c, result)
+}
+
+// parseFileRequest parses and validates file upload request
+func (ctrl *FileController) parseFileRequest(c *fiber.Ctx) (*multipart.FileHeader, string, string, string, error) {
+	// Get file from multipart form
+	file, err := c.FormFile("file")
+	if err != nil {
+		return nil, "", "", "", utils.BadRequest(c, "file is required")
+	}
+
+	// Get analysis type with default
+	analysisType := c.FormValue("analysis_type")
+	if analysisType == "" {
+		analysisType = "summary"
+	}
+
+	// Validate analysis type
+	validTypes := []string{"summary", "detail", "qa", "extract"}
+	isValid := false
+	for _, vt := range validTypes {
+		if analysisType == vt {
+			isValid = true
+			break
 		}
+	}
+	if !isValid {
+		return nil, "", "", "", utils.BadRequest(c, "invalid analysis_type. Allowed: summary, detail, qa, extract")
+	}
 
-		if strings.Contains(errMsg, "file size exceeds") {
-			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
+	// Get optional parameters
+	prompt := c.FormValue("prompt")
+	language := c.FormValue("language")
+	if language == "" {
+		language = "th"
+	}
 
-		if strings.Contains(errMsg, "failed to parse") || strings.Contains(errMsg, "failed to extract") {
-			return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
-				"error": "failed to parse file: " + err.Error(),
-			})
-		}
+	return file, analysisType, prompt, language, nil
+}
 
-		// Generic error
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to analyze file: " + err.Error(),
+// analyzeImageFile handles image file analysis using Vision API
+func (ctrl *FileController) analyzeImageFile(c *fiber.Ctx, file *multipart.FileHeader, contentType, prompt, language string) error {
+	// Open file
+	fileData, err := file.Open()
+	if err != nil {
+		return utils.InternalError(c, "failed to open file")
+	}
+	defer fileData.Close()
+
+	// Analyze image
+	analysis, err := ctrl.fileService.AnalyzeImage(c.Context(), fileData, file.Filename, prompt)
+	if err != nil {
+		return utils.InternalError(c, fmt.Sprintf("failed to analyze image: %v", err))
+	}
+
+	// Build response
+	response := services.FileAnalysisResponse{
+		FileID:      generateFileID(),
+		FileName:    file.Filename,
+		FileType:    contentType,
+		FileSize:    file.Size,
+		Analysis:    analysis,
+		Summary:     extractFirstSentence(analysis),
+		KeyPoints:   []string{},
+		Language:    language,
+		TokensUsed:  0,
+		ProcessTime: 0,
+	}
+
+	return utils.SuccessJSON(c, response)
+}
+
+// handleAnalysisError maps service errors to appropriate HTTP status codes
+func (ctrl *FileController) handleAnalysisError(c *fiber.Ctx, err error) error {
+	errMsg := err.Error()
+
+	if strings.Contains(errMsg, "unsupported file type") {
+		return c.Status(fiber.StatusUnsupportedMediaType).JSON(fiber.Map{
+			"error": err.Error(),
 		})
 	}
 
-	// Save to database
+	if strings.Contains(errMsg, "file size exceeds") {
+		return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	if strings.Contains(errMsg, "failed to parse") || strings.Contains(errMsg, "failed to extract") {
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to parse file: %v", err),
+		})
+	}
+
+	return utils.InternalError(c, fmt.Sprintf("failed to analyze file: %v", err))
+}
+
+// saveFileAnalysis saves analysis result to database
+func (ctrl *FileController) saveFileAnalysis(result *services.FileAnalysisResponse, analysisType, prompt, language string) error {
+	if ctrl.repository == nil {
+		return nil
+	}
+
 	fileAnalysis := &models.FileAnalysis{
 		FileName:      sanitizeUTF8(result.FileName),
 		FileType:      result.FileType,
@@ -167,59 +191,48 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 		ProcessTimeMs: result.ProcessTime,
 	}
 
-	// Save to database (log error but don't fail the request)
-	if ctrl.repository != nil {
-		if err := ctrl.repository.Create(fileAnalysis); err != nil {
-			log.Printf("⚠️  Failed to save file analysis to database: %v", err)
-		} else {
-			// Update response with database ID
-			result.FileID = fileAnalysis.ID.String()
-			log.Printf("✅ File analysis saved to database with ID: %s", result.FileID)
-		}
+	if err := ctrl.repository.Create(fileAnalysis); err != nil {
+		return err
 	}
 
-	return c.Status(fiber.StatusOK).JSON(result)
+	result.FileID = fileAnalysis.ID.String()
+	log.Printf("✅ File analysis saved to database with ID: %s", result.FileID)
+	return nil
 }
 
 // GetFileHistory handles GET /api/file/history endpoint
 func (ctrl *FileController) GetFileHistory(c *fiber.Ctx) error {
-	// Parse query parameters
-	limit := c.QueryInt("limit", 20)
-	offset := c.QueryInt("offset", 0)
+	// Validate pagination
+	limit, offset := utils.ValidatePagination(
+		c.QueryInt("limit", 20),
+		c.QueryInt("offset", 0),
+		100, // max limit
+	)
+
 	fileType := c.Query("file_type", "all")
 
-	// Validate limit (max 100)
-	if limit > 100 {
-		limit = 100
-	}
-	if limit < 1 {
-		limit = 20
-	}
-
-	// Validate offset
-	if offset < 0 {
-		offset = 0
-	}
-
-	var files []models.FileAnalysis
-	var total int64
-	var err error
-
-	// Get files based on filter
-	if fileType != "" && fileType != "all" {
-		files, total, err = ctrl.repository.GetByFileType(fileType, limit, offset)
-	} else {
-		files, total, err = ctrl.repository.GetAll(limit, offset)
-	}
-
+	// Get files from repository
+	files, total, err := ctrl.getFilesByType(fileType, limit, offset)
 	if err != nil {
 		log.Printf("Failed to fetch file history: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to fetch file history",
-		})
+		return utils.InternalError(c, "failed to fetch file history")
 	}
 
-	// Build response
+	// Build and return response
+	response := ctrl.buildFileHistoryResponse(files, total, limit, offset)
+	return utils.SuccessJSON(c, response)
+}
+
+// getFilesByType retrieves files based on file type filter
+func (ctrl *FileController) getFilesByType(fileType string, limit, offset int) ([]models.FileAnalysis, int64, error) {
+	if fileType != "" && fileType != "all" {
+		return ctrl.repository.GetByFileType(fileType, limit, offset)
+	}
+	return ctrl.repository.GetAll(limit, offset)
+}
+
+// buildFileHistoryResponse builds the file history response
+func (ctrl *FileController) buildFileHistoryResponse(files []models.FileAnalysis, total int64, limit, offset int) fiber.Map {
 	response := make([]fiber.Map, len(files))
 	for i, file := range files {
 		response[i] = fiber.Map{
@@ -234,27 +247,23 @@ func (ctrl *FileController) GetFileHistory(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+	return fiber.Map{
 		"files":  response,
 		"total":  total,
 		"limit":  limit,
 		"offset": offset,
-	})
+	}
 }
 
 // ReanalyzeFile handles POST /api/file/:file_id/reanalyze endpoint
 // This is a placeholder for future implementation
 func (ctrl *FileController) ReanalyzeFile(c *fiber.Ctx) error {
 	fileID := c.Params("file_id")
-
 	if fileID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "file_id is required",
-		})
+		return utils.BadRequest(c, "file_id is required")
 	}
 
 	// TODO: Implement re-analysis from stored files
-
 	return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
 		"error": "re-analysis feature not yet implemented",
 	})

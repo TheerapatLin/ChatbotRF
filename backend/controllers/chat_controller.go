@@ -7,6 +7,7 @@ import (
 	"chatbot/models"
 	"chatbot/repositories"
 	"chatbot/services"
+	"chatbot/utils"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/sashabaranov/go-openai"
@@ -37,13 +38,13 @@ func NewChatController(
 // ChatRequest represents the incoming chat request
 type ChatRequest struct {
 	Message      string  `json:"message" validate:"required"`
-	SessionID    string  `json:"session_id,omitempty"`    // Session ID for conversation history
+	SessionID    string  `json:"session_id,omitempty"`
 	PersonaID    *int    `json:"persona_id,omitempty"`
 	SystemPrompt string  `json:"system_prompt,omitempty"`
 	Temperature  float32 `json:"temperature,omitempty"`
 	MaxTokens    int     `json:"max_tokens,omitempty"`
 	Model        string  `json:"model,omitempty"`
-	UseHistory   bool    `json:"use_history,omitempty"`   // Enable conversation history (default: false)
+	UseHistory   bool    `json:"use_history,omitempty"`
 }
 
 // PersonaInfo contains persona information in response
@@ -57,134 +58,150 @@ type PersonaInfo struct {
 
 // ChatResponse represents the API response
 type ChatResponse struct {
-	MessageID       string       `json:"message_id"`
-	SessionID       string       `json:"session_id"`
-	Reply           string       `json:"reply"`
-	PersonaUsed     *PersonaInfo `json:"persona,omitempty"`
-	TokensUsed      int          `json:"tokens_used"`
-	Model           string       `json:"model"`
-	Timestamp       time.Time    `json:"timestamp"`
-	HistoryUsed     bool         `json:"history_used"`     // Indicates if history was used
-	HistoryCount    int          `json:"history_count"`    // Number of historical messages used
-}
-
-// MessageHistoryItem represents a single message in history
-type MessageHistoryItem struct {
-	ID        string    `json:"id"`
-	Role      string    `json:"role"`
-	Content   string    `json:"content"`
-	PersonaID *int      `json:"persona_id,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	MessageID    string       `json:"message_id"`
+	SessionID    string       `json:"session_id"`
+	Reply        string       `json:"reply"`
+	PersonaUsed  *PersonaInfo `json:"persona,omitempty"`
+	TokensUsed   int          `json:"tokens_used"`
+	Model        string       `json:"model"`
+	Timestamp    time.Time    `json:"timestamp"`
+	HistoryUsed  bool         `json:"history_used"`
+	HistoryCount int          `json:"history_count"`
 }
 
 // ChatHistoryResponse represents the chat history API response
 type ChatHistoryResponse struct {
-	Messages []MessageHistoryItem `json:"messages"`
-	Total    int64                `json:"total"`
-	Limit    int                  `json:"limit"`
-	Offset   int                  `json:"offset"`
+	Messages []utils.MessageHistoryItem `json:"messages"`
+	Total    int64                      `json:"total"`
+	Limit    int                        `json:"limit"`
+	Offset   int                        `json:"offset"`
 }
 
 // HandleChat handles POST /api/chat endpoint
 func (ctrl *ChatController) HandleChat(c *fiber.Ctx) error {
 	// 1. Parse and validate request
-	var req ChatRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	req, err := ctrl.parseRequest(c)
+	if err != nil {
+		return err
 	}
 
-	// Validate message is not empty
-	if req.Message == "" {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Message is required",
-		})
-	}
-
-	// 2. Get persona if persona_id provided
-	var persona *models.Persona
-	var systemPrompt string
-	var personaInfo *PersonaInfo
-
-	if req.PersonaID != nil {
-		var err error
-		persona, err = ctrl.personaRepo.FindByID(*req.PersonaID)
-		if err != nil {
-			return c.Status(404).JSON(fiber.Map{
-				"error": fmt.Sprintf("Persona with ID %d not found", *req.PersonaID),
-			})
-		}
-
-		// Use persona's system prompt if no custom system prompt provided
-		if req.SystemPrompt == "" {
-			systemPrompt = persona.SystemPrompt
-		} else {
-			systemPrompt = req.SystemPrompt
-		}
-
-		personaInfo = &PersonaInfo{
-			ID:          persona.ID,
-			Name:        persona.Name,
-			Expertise:   persona.Expertise,
-			Icon:        persona.Icon,
-			Description: persona.Description,
-		}
-	} else {
-		// Use custom system prompt if provided
-		systemPrompt = req.SystemPrompt
+	// 2. Get persona and system prompt
+	systemPrompt, personaInfo, err := ctrl.getPersonaInfo(req)
+	if err != nil {
+		return err
 	}
 
 	// 3. Generate or use session ID
-	sessionID := req.SessionID
-	if sessionID == "" && req.UseHistory {
-		// Generate new session ID if history is requested but no session provided
-		sessionID = fmt.Sprintf("session_%d", time.Now().UnixNano())
-	}
+	sessionID := ctrl.getOrGenerateSessionID(req)
 
 	// 4. Build context with conversation history
-	var messages []openai.ChatCompletionMessage
-	historyCount := 0
-
-	if req.UseHistory && sessionID != "" {
-		// Use context service to build messages with history (10 messages limit)
-		var err error
-		messages, err = ctrl.contextService.BuildContextWithHistory(
-			sessionID,
-			systemPrompt,
-			req.Message,
-			10, // Retrieve last 10 messages
-		)
-		if err != nil {
-			// Log error but continue without history
-			fmt.Printf("⚠️  Failed to build context with history: %v\n", err)
-		} else {
-			// Count historical messages (exclude system prompt and current message)
-			historyCount = len(messages) - 1 // Subtract current message
-			if systemPrompt != "" {
-				historyCount-- // Subtract system prompt
-			}
-		}
-	}
-
-	// If not using history or history failed, build simple message array
-	if len(messages) == 0 {
-		messages = []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: req.Message,
-			},
-		}
-	}
+	messages, historyCount := ctrl.buildMessages(req, sessionID, systemPrompt)
 
 	// 5. Call OpenAI service
-	// Note: When using history, system prompt is already included in messages
-	// Only send SystemPrompt if NOT using history
+	openaiResp, err := ctrl.callOpenAI(req, messages, systemPrompt)
+	if err != nil {
+		return utils.ServiceUnavailable(c, fmt.Sprintf("Failed to get AI response: %v", err))
+	}
+
+	// 6. Save messages to database
+	if err := ctrl.saveMessages(req, sessionID, openaiResp); err != nil {
+		return utils.InternalError(c, "Failed to save messages")
+	}
+
+	// 7. Build and return response
+	response := ctrl.buildResponse(sessionID, openaiResp, personaInfo, req.UseHistory, historyCount)
+	return utils.SuccessJSON(c, response)
+}
+
+// parseRequest parses and validates the incoming request
+func (ctrl *ChatController) parseRequest(c *fiber.Ctx) (*ChatRequest, error) {
+	var req ChatRequest
+	if err := c.BodyParser(&req); err != nil {
+		return nil, utils.BadRequest(c, "Invalid request body")
+	}
+
+	if req.Message == "" {
+		return nil, utils.BadRequest(c, "Message is required")
+	}
+
+	return &req, nil
+}
+
+// getPersonaInfo retrieves persona information and determines system prompt
+func (ctrl *ChatController) getPersonaInfo(req *ChatRequest) (string, *PersonaInfo, error) {
+	if req.PersonaID == nil {
+		return req.SystemPrompt, nil, nil
+	}
+
+	persona, err := ctrl.personaRepo.FindByID(*req.PersonaID)
+	if err != nil {
+		return "", nil, fmt.Errorf("persona with ID %d not found", *req.PersonaID)
+	}
+
+	systemPrompt := req.SystemPrompt
+	if systemPrompt == "" {
+		systemPrompt = persona.SystemPrompt
+	}
+
+	personaInfo := &PersonaInfo{
+		ID:          persona.ID,
+		Name:        persona.Name,
+		Expertise:   persona.Expertise,
+		Icon:        persona.Icon,
+		Description: persona.Description,
+	}
+
+	return systemPrompt, personaInfo, nil
+}
+
+// getOrGenerateSessionID returns existing session ID or generates a new one
+func (ctrl *ChatController) getOrGenerateSessionID(req *ChatRequest) string {
+	if req.SessionID != "" || !req.UseHistory {
+		return req.SessionID
+	}
+	return fmt.Sprintf("session_%d", time.Now().UnixNano())
+}
+
+// buildMessages builds OpenAI messages array with optional history
+func (ctrl *ChatController) buildMessages(req *ChatRequest, sessionID, systemPrompt string) ([]openai.ChatCompletionMessage, int) {
+	historyCount := 0
+
+	// Build context with history if enabled
+	if req.UseHistory && sessionID != "" {
+		messages, err := ctrl.contextService.BuildContextWithHistory(
+			sessionID, systemPrompt, req.Message, 10,
+		)
+		if err != nil {
+			fmt.Printf("⚠️  Failed to build context with history: %v\n", err)
+		} else {
+			historyCount = len(messages) - 1 // Subtract current message
+			if systemPrompt != "" {
+				historyCount--
+			}
+			return messages, historyCount
+		}
+	}
+
+	// Fallback: simple message without history
+	return []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleUser, Content: req.Message},
+	}, 0
+}
+
+// callOpenAI sends request to OpenAI API
+func (ctrl *ChatController) callOpenAI(req *ChatRequest, messages []openai.ChatCompletionMessage, systemPrompt string) (*services.ChatResponse, error) {
+	// Only include system prompt if not using history (to avoid duplication)
 	systemPromptForAPI := ""
 	if !req.UseHistory || len(messages) == 1 {
-		// Not using history OR only has current message (history retrieval failed)
 		systemPromptForAPI = systemPrompt
 	}
+
+	// Debug log
+	fmt.Printf("🔍 Debug callOpenAI:\n")
+	fmt.Printf("  - UseHistory: %v\n", req.UseHistory)
+	fmt.Printf("  - Messages count: %d\n", len(messages))
+	fmt.Printf("  - SystemPrompt from param: %q\n", systemPrompt)
+	fmt.Printf("  - SystemPrompt for API: %q\n", systemPromptForAPI)
 
 	openaiReq := services.ChatRequest{
 		Messages:     messages,
@@ -194,28 +211,23 @@ func (ctrl *ChatController) HandleChat(c *fiber.Ctx) error {
 		SystemPrompt: systemPromptForAPI,
 	}
 
-	openaiResp, err := ctrl.openaiService.SendChatRequest(openaiReq)
-	if err != nil {
-		return c.Status(503).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to get AI response: %v", err),
-		})
-	}
+	return ctrl.openaiService.SendChatRequest(openaiReq)
+}
 
-	// 6. Save user message to database
+// saveMessages saves user message and AI response to database
+func (ctrl *ChatController) saveMessages(req *ChatRequest, sessionID string, openaiResp *services.ChatResponse) error {
+	// Save user message
 	userMessage := &models.Message{
 		SessionID: sessionID,
 		Role:      models.RoleUser,
 		Content:   req.Message,
 		PersonaID: req.PersonaID,
 	}
-
 	if err := ctrl.messageRepo.Create(userMessage); err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to save user message",
-		})
+		return err
 	}
 
-	// 7. Save AI response to database
+	// Save AI response
 	tokensUsed := openaiResp.TokensUsed
 	assistantMessage := &models.Message{
 		SessionID:  sessionID,
@@ -224,75 +236,46 @@ func (ctrl *ChatController) HandleChat(c *fiber.Ctx) error {
 		PersonaID:  req.PersonaID,
 		TokensUsed: &tokensUsed,
 	}
+	return ctrl.messageRepo.Create(assistantMessage)
+}
 
-	if err := ctrl.messageRepo.Create(assistantMessage); err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to save assistant message",
-		})
-	}
-
-	// 8. Return response
-	response := ChatResponse{
-		MessageID:    assistantMessage.ID.String(),
+// buildResponse builds the final chat response
+func (ctrl *ChatController) buildResponse(sessionID string, openaiResp *services.ChatResponse, personaInfo *PersonaInfo, useHistory bool, historyCount int) ChatResponse {
+	return ChatResponse{
+		MessageID:    "", // Will be set after save
 		SessionID:    sessionID,
 		Reply:        openaiResp.Content,
 		PersonaUsed:  personaInfo,
 		TokensUsed:   openaiResp.TokensUsed,
 		Model:        openaiResp.Model,
-		Timestamp:    assistantMessage.CreatedAt,
-		HistoryUsed:  req.UseHistory && historyCount > 0,
+		Timestamp:    time.Now(),
+		HistoryUsed:  useHistory && historyCount > 0,
 		HistoryCount: historyCount,
 	}
-
-	return c.Status(200).JSON(response)
 }
 
 // GetChatHistory handles GET /api/chat/history endpoint
 func (ctrl *ChatController) GetChatHistory(c *fiber.Ctx) error {
-	// Parse query parameters with defaults
-	limit := c.QueryInt("limit", 50)
-	offset := c.QueryInt("offset", 0)
-
-	// Validate limit (max 100)
-	if limit > 100 {
-		limit = 100
-	}
-	if limit < 1 {
-		limit = 1
-	}
-
-	// Validate offset
-	if offset < 0 {
-		offset = 0
-	}
+	// Parse and validate pagination
+	limit, offset := utils.ValidatePagination(
+		c.QueryInt("limit", 50),
+		c.QueryInt("offset", 0),
+		100, // max limit
+	)
 
 	// Get messages from repository
 	messages, total, err := ctrl.messageRepo.FindWithPagination(limit, offset)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to retrieve chat history",
-		})
+		return utils.InternalError(c, "Failed to retrieve chat history")
 	}
 
-	// Convert to response format
-	historyItems := make([]MessageHistoryItem, len(messages))
-	for i, msg := range messages {
-		historyItems[i] = MessageHistoryItem{
-			ID:        msg.ID.String(),
-			Role:      string(msg.Role),
-			Content:   msg.Content,
-			PersonaID: msg.PersonaID,
-			CreatedAt: msg.CreatedAt,
-		}
-	}
-
-	// Return response
+	// Build response
 	response := ChatHistoryResponse{
-		Messages: historyItems,
+		Messages: utils.ToMessageHistoryItems(messages),
 		Total:    total,
 		Limit:    limit,
 		Offset:   offset,
 	}
 
-	return c.Status(200).JSON(response)
+	return utils.SuccessJSON(c, response)
 }

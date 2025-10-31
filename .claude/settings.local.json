@@ -33,7 +33,8 @@
       "Bash(go vet:*)",
       "Bash(staticcheck:*)",
       "Bash(ping:*)",
-      "Bash(nul)"
+      "Bash(nul)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []
