@@ -16,6 +16,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	// Initialize repositories
 	messageRepo := repositories.NewMessageRepository(db)
 	personaRepo := repositories.NewPersonaRepository(db)
+	fileAnalysisRepo := repositories.NewFileAnalysisRepository(db)
 
 	// Initialize services
 	openaiService := services.NewOpenAIService(cfg)
@@ -27,7 +28,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	personaCtrl := controllers.NewPersonaController(personaRepo, messageRepo)
 	audioCtrl := controllers.NewAudioController(openaiService, ttsService)
 	wsCtrl := controllers.NewWebSocketController(messageRepo, personaRepo, openaiService)
-	fileCtrl := controllers.NewFileController(fileService)
+	fileCtrl := controllers.NewFileController(fileService, fileAnalysisRepo)
 
 	// API group
 	api := app.Group("/api")
@@ -56,7 +57,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	// File analysis endpoints
 	api.Post("/file/analyze", fileCtrl.AnalyzeFile)
 	api.Get("/file/history", fileCtrl.GetFileHistory)
-	api.Post("/file/:file_id/reanalyze", fileCtrl.ReanalyzeFile)
+	api.Post("/file/:file_id/reanalyze", fileCtrl.ReanalyzeFile) // TODO: not yet implemented
 
 	// WebSocket upgrade middleware: ตรวจสอบ request จาก client
 	app.Use("/api/chat/stream", func(c *fiber.Ctx) error {

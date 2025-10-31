@@ -1,23 +1,33 @@
 package controllers
 
 import (
+	"chatbot/models"
+	"chatbot/repositories"
 	"chatbot/services"
 	"fmt"
+	"log"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/lib/pq"
 )
 
 // FileController handles file analysis HTTP requests
 type FileController struct {
 	fileService *services.FileService
+	repository  *repositories.FileAnalysisRepository
 }
 
 // NewFileController creates a new file controller
-func NewFileController(fileService *services.FileService) *FileController {
+func NewFileController(
+	fileService *services.FileService,
+	repository *repositories.FileAnalysisRepository,
+) *FileController {
 	return &FileController{
 		fileService: fileService,
+		repository:  repository,
 	}
 }
 
@@ -140,20 +150,95 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 		})
 	}
 
+	// Save to database
+	fileAnalysis := &models.FileAnalysis{
+		FileName:      sanitizeUTF8(result.FileName),
+		FileType:      result.FileType,
+		FileSize:      result.FileSize,
+		AnalysisType:  analysisType,
+		CustomPrompt:  sanitizeUTF8(prompt),
+		Language:      language,
+		Analysis:      sanitizeUTF8(result.Analysis),
+		Summary:       sanitizeUTF8(result.Summary),
+		KeyPoints:     pq.StringArray(sanitizeStringArray(result.KeyPoints)),
+		Entities:      pq.StringArray(sanitizeStringArray(result.Entities)),
+		Sentiment:     result.Sentiment,
+		TokensUsed:    result.TokensUsed,
+		ProcessTimeMs: result.ProcessTime,
+	}
+
+	// Save to database (log error but don't fail the request)
+	if ctrl.repository != nil {
+		if err := ctrl.repository.Create(fileAnalysis); err != nil {
+			log.Printf("⚠️  Failed to save file analysis to database: %v", err)
+		} else {
+			// Update response with database ID
+			result.FileID = fileAnalysis.ID.String()
+			log.Printf("✅ File analysis saved to database with ID: %s", result.FileID)
+		}
+	}
+
 	return c.Status(fiber.StatusOK).JSON(result)
 }
 
 // GetFileHistory handles GET /api/file/history endpoint
-// This is a placeholder for future implementation
 func (ctrl *FileController) GetFileHistory(c *fiber.Ctx) error {
-	// TODO: Implement database storage for file analysis history
+	// Parse query parameters
+	limit := c.QueryInt("limit", 20)
+	offset := c.QueryInt("offset", 0)
+	fileType := c.Query("file_type", "all")
 
-	// For now, return empty response
+	// Validate limit (max 100)
+	if limit > 100 {
+		limit = 100
+	}
+	if limit < 1 {
+		limit = 20
+	}
+
+	// Validate offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	var files []models.FileAnalysis
+	var total int64
+	var err error
+
+	// Get files based on filter
+	if fileType != "" && fileType != "all" {
+		files, total, err = ctrl.repository.GetByFileType(fileType, limit, offset)
+	} else {
+		files, total, err = ctrl.repository.GetAll(limit, offset)
+	}
+
+	if err != nil {
+		log.Printf("Failed to fetch file history: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch file history",
+		})
+	}
+
+	// Build response
+	response := make([]fiber.Map, len(files))
+	for i, file := range files {
+		response[i] = fiber.Map{
+			"file_id":       file.ID.String(),
+			"filename":      file.FileName,
+			"file_type":     file.FileType,
+			"file_size":     file.FileSize,
+			"analysis_type": file.AnalysisType,
+			"language":      file.Language,
+			"tokens_used":   file.TokensUsed,
+			"created_at":    file.CreatedAt,
+		}
+	}
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"files":  []interface{}{},
-		"total":  0,
-		"limit":  20,
-		"offset": 0,
+		"files":  response,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
 	})
 }
 
@@ -193,4 +278,36 @@ func extractFirstSentence(text string) string {
 		return text[:200] + "..."
 	}
 	return text
+}
+
+// sanitizeUTF8 removes invalid UTF-8 sequences from a string
+func sanitizeUTF8(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+
+	// Build a new string with only valid UTF-8 runes
+	var builder strings.Builder
+	builder.Grow(len(s))
+
+	for _, r := range s {
+		if r != utf8.RuneError {
+			builder.WriteRune(r)
+		}
+	}
+
+	return builder.String()
+}
+
+// sanitizeStringArray sanitizes all strings in an array
+func sanitizeStringArray(arr []string) []string {
+	if arr == nil {
+		return nil
+	}
+
+	result := make([]string, len(arr))
+	for i, s := range arr {
+		result[i] = sanitizeUTF8(s)
+	}
+	return result
 }

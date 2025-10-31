@@ -37,6 +37,7 @@ func main() {
 	err = db.AutoMigrate(
 		&models.Persona{},
 		&models.Message{},
+		&models.FileAnalysis{},
 	)
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
