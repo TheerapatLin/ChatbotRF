@@ -70,3 +70,37 @@ func (r *MessageRepository) CountByPersonaID(personaID int) (int64, error) {
 	err := r.db.Model(&models.Message{}).Where("persona_id = ?", personaID).Count(&count).Error
 	return count, err
 }
+
+// GetRecentBySession retrieves recent N messages from a specific session
+func (r *MessageRepository) GetRecentBySession(sessionID string, limit int) ([]models.Message, error) {
+	var messages []models.Message
+	err := r.db.Where("session_id = ?", sessionID).
+		Order("created_at ASC").  // Oldest first for proper conversation flow
+		Limit(limit).
+		Find(&messages).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// If we have more messages than the limit, return only the most recent ones
+	if len(messages) > limit {
+		messages = messages[len(messages)-limit:]
+	}
+
+	return messages, nil
+}
+
+// GetAllBySession retrieves all messages from a specific session
+func (r *MessageRepository) GetAllBySession(sessionID string) ([]models.Message, error) {
+	var messages []models.Message
+	err := r.db.Where("session_id = ?", sessionID).
+		Order("created_at ASC").
+		Find(&messages).Error
+	return messages, err
+}
+
+// DeleteSession removes all messages from a specific session
+func (r *MessageRepository) DeleteSession(sessionID string) error {
+	return r.db.Where("session_id = ?", sessionID).Delete(&models.Message{}).Error
+}

@@ -31,7 +31,9 @@
       "Bash(go list:*)",
       "Bash(start /B chatbot.exe)",
       "Bash(go vet:*)",
-      "Bash(staticcheck:*)"
+      "Bash(staticcheck:*)",
+      "Bash(ping:*)",
+      "Bash(nul)"
     ],
     "deny": [],
     "ask": []

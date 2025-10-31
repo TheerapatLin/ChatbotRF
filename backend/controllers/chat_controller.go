@@ -14,9 +14,10 @@ import (
 
 // ChatController handles chat-related HTTP requests
 type ChatController struct {
-	messageRepo   *repositories.MessageRepository
-	personaRepo   *repositories.PersonaRepository
-	openaiService *services.OpenAIService
+	messageRepo    *repositories.MessageRepository
+	personaRepo    *repositories.PersonaRepository
+	openaiService  *services.OpenAIService
+	contextService *services.ContextService
 }
 
 // NewChatController creates a new chat controller
@@ -26,20 +27,23 @@ func NewChatController(
 	openaiService *services.OpenAIService,
 ) *ChatController {
 	return &ChatController{
-		messageRepo:   messageRepo,
-		personaRepo:   personaRepo,
-		openaiService: openaiService,
+		messageRepo:    messageRepo,
+		personaRepo:    personaRepo,
+		openaiService:  openaiService,
+		contextService: services.NewContextService(messageRepo),
 	}
 }
 
 // ChatRequest represents the incoming chat request
 type ChatRequest struct {
 	Message      string  `json:"message" validate:"required"`
+	SessionID    string  `json:"session_id,omitempty"`    // Session ID for conversation history
 	PersonaID    *int    `json:"persona_id,omitempty"`
 	SystemPrompt string  `json:"system_prompt,omitempty"`
 	Temperature  float32 `json:"temperature,omitempty"`
 	MaxTokens    int     `json:"max_tokens,omitempty"`
 	Model        string  `json:"model,omitempty"`
+	UseHistory   bool    `json:"use_history,omitempty"`   // Enable conversation history (default: false)
 }
 
 // PersonaInfo contains persona information in response
@@ -53,12 +57,15 @@ type PersonaInfo struct {
 
 // ChatResponse represents the API response
 type ChatResponse struct {
-	MessageID   string       `json:"message_id"`
-	Reply       string       `json:"reply"`
-	PersonaUsed *PersonaInfo `json:"persona,omitempty"`
-	TokensUsed  int          `json:"tokens_used"`
-	Model       string       `json:"model"`
-	Timestamp   time.Time    `json:"timestamp"`
+	MessageID       string       `json:"message_id"`
+	SessionID       string       `json:"session_id"`
+	Reply           string       `json:"reply"`
+	PersonaUsed     *PersonaInfo `json:"persona,omitempty"`
+	TokensUsed      int          `json:"tokens_used"`
+	Model           string       `json:"model"`
+	Timestamp       time.Time    `json:"timestamp"`
+	HistoryUsed     bool         `json:"history_used"`     // Indicates if history was used
+	HistoryCount    int          `json:"history_count"`    // Number of historical messages used
 }
 
 // MessageHistoryItem represents a single message in history
@@ -128,21 +135,63 @@ func (ctrl *ChatController) HandleChat(c *fiber.Ctx) error {
 		systemPrompt = req.SystemPrompt
 	}
 
-	// 3. Prepare messages for OpenAI
-	messages := []openai.ChatCompletionMessage{
-		{
-			Role:    openai.ChatMessageRoleUser,
-			Content: req.Message,
-		},
+	// 3. Generate or use session ID
+	sessionID := req.SessionID
+	if sessionID == "" && req.UseHistory {
+		// Generate new session ID if history is requested but no session provided
+		sessionID = fmt.Sprintf("session_%d", time.Now().UnixNano())
 	}
 
-	// 4. Call OpenAI service
+	// 4. Build context with conversation history
+	var messages []openai.ChatCompletionMessage
+	historyCount := 0
+
+	if req.UseHistory && sessionID != "" {
+		// Use context service to build messages with history (10 messages limit)
+		var err error
+		messages, err = ctrl.contextService.BuildContextWithHistory(
+			sessionID,
+			systemPrompt,
+			req.Message,
+			10, // Retrieve last 10 messages
+		)
+		if err != nil {
+			// Log error but continue without history
+			fmt.Printf("⚠️  Failed to build context with history: %v\n", err)
+		} else {
+			// Count historical messages (exclude system prompt and current message)
+			historyCount = len(messages) - 1 // Subtract current message
+			if systemPrompt != "" {
+				historyCount-- // Subtract system prompt
+			}
+		}
+	}
+
+	// If not using history or history failed, build simple message array
+	if len(messages) == 0 {
+		messages = []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleUser,
+				Content: req.Message,
+			},
+		}
+	}
+
+	// 5. Call OpenAI service
+	// Note: When using history, system prompt is already included in messages
+	// Only send SystemPrompt if NOT using history
+	systemPromptForAPI := ""
+	if !req.UseHistory || len(messages) == 1 {
+		// Not using history OR only has current message (history retrieval failed)
+		systemPromptForAPI = systemPrompt
+	}
+
 	openaiReq := services.ChatRequest{
 		Messages:     messages,
 		Model:        req.Model,
 		Temperature:  req.Temperature,
 		MaxTokens:    req.MaxTokens,
-		SystemPrompt: systemPrompt,
+		SystemPrompt: systemPromptForAPI,
 	}
 
 	openaiResp, err := ctrl.openaiService.SendChatRequest(openaiReq)
@@ -152,8 +201,9 @@ func (ctrl *ChatController) HandleChat(c *fiber.Ctx) error {
 		})
 	}
 
-	// 5. Save user message to database
+	// 6. Save user message to database
 	userMessage := &models.Message{
+		SessionID: sessionID,
 		Role:      models.RoleUser,
 		Content:   req.Message,
 		PersonaID: req.PersonaID,
@@ -165,9 +215,10 @@ func (ctrl *ChatController) HandleChat(c *fiber.Ctx) error {
 		})
 	}
 
-	// 6. Save AI response to database
+	// 7. Save AI response to database
 	tokensUsed := openaiResp.TokensUsed
 	assistantMessage := &models.Message{
+		SessionID:  sessionID,
 		Role:       models.RoleAssistant,
 		Content:    openaiResp.Content,
 		PersonaID:  req.PersonaID,
@@ -180,14 +231,17 @@ func (ctrl *ChatController) HandleChat(c *fiber.Ctx) error {
 		})
 	}
 
-	// 7. Return response
+	// 8. Return response
 	response := ChatResponse{
-		MessageID:   assistantMessage.ID.String(),
-		Reply:       openaiResp.Content,
-		PersonaUsed: personaInfo,
-		TokensUsed:  openaiResp.TokensUsed,
-		Model:       openaiResp.Model,
-		Timestamp:   assistantMessage.CreatedAt,
+		MessageID:    assistantMessage.ID.String(),
+		SessionID:    sessionID,
+		Reply:        openaiResp.Content,
+		PersonaUsed:  personaInfo,
+		TokensUsed:   openaiResp.TokensUsed,
+		Model:        openaiResp.Model,
+		Timestamp:    assistantMessage.CreatedAt,
+		HistoryUsed:  req.UseHistory && historyCount > 0,
+		HistoryCount: historyCount,
 	}
 
 	return c.Status(200).JSON(response)

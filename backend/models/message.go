@@ -11,6 +11,7 @@ import (
 // Message represents a chat message (simplified for learning project)
 type Message struct {
 	ID         uuid.UUID      `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
+	SessionID  string         `gorm:"type:varchar(100);index" json:"session_id"`                                      // Session identifier for grouping conversations
 	Role       string         `gorm:"type:varchar(20);not null;check:role IN ('user', 'assistant', 'system')" json:"role"`
 	Content    string         `gorm:"type:text;not null" json:"content"`
 	PersonaID  *int           `json:"persona_id,omitempty"`
