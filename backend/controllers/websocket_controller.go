@@ -16,30 +16,37 @@ import (
 
 // WebSocketController handles WebSocket connections for streaming chat
 type WebSocketController struct {
-	messageRepo   *repositories.MessageRepository
-	personaRepo   *repositories.PersonaRepository
-	openaiService *services.OpenAIService
+	messageRepo      *repositories.MessageRepository
+	personaRepo      *repositories.PersonaRepository
+	fileAnalysisRepo *repositories.FileAnalysisRepository
+	openaiService    *services.OpenAIService
+	contextService   *services.ContextService
 }
 
 // NewWebSocketController creates a new WebSocket controller
 func NewWebSocketController(
 	messageRepo *repositories.MessageRepository,
 	personaRepo *repositories.PersonaRepository,
+	fileAnalysisRepo *repositories.FileAnalysisRepository,
 	openaiService *services.OpenAIService,
 ) *WebSocketController {
 	return &WebSocketController{
-		messageRepo:   messageRepo,
-		personaRepo:   personaRepo,
-		openaiService: openaiService,
+		messageRepo:      messageRepo,
+		personaRepo:      personaRepo,
+		fileAnalysisRepo: fileAnalysisRepo,
+		openaiService:    openaiService,
+		contextService:   services.NewContextService(messageRepo, fileAnalysisRepo),
 	}
 }
 
 // WSMessage represents incoming WebSocket messages
 type WSMessage struct {
-	Type         string `json:"type"`          // "message"
-	Content      string `json:"content"`       // User message
-	PersonaID    *int   `json:"persona_id"`    // Persona ID
-	SystemPrompt string `json:"system_prompt"` // Optional custom system prompt
+	Type         string   `json:"type"`          // "message"
+	Content      string   `json:"content"`       // User message
+	PersonaID    *int     `json:"persona_id"`    // Persona ID
+	SystemPrompt string   `json:"system_prompt"` // Optional custom system prompt
+	SessionID    string   `json:"session_id"`    // Session ID for conversation history
+	FileIDs      []string `json:"file_ids"`      // Array of file analysis UUIDs to attach
 }
 
 // WSResponse represents outgoing WebSocket messages
@@ -97,6 +104,11 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 		return fmt.Errorf("content is required")
 	}
 
+	// Validate file_ids limit (max 5 files per message)
+	if len(msg.FileIDs) > 5 {
+		return fmt.Errorf("maximum 5 files allowed per message")
+	}
+
 	// 2. Get persona if persona_id provided (default to 1 if not specified)
 	personaID := 1
 	if msg.PersonaID != nil {
@@ -116,16 +128,31 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 		systemPrompt = persona.SystemPrompt + "\n\nAdditional instructions: " + msg.SystemPrompt
 	}
 
-	// 4. Prepare messages for OpenAI
-	messages := []openai.ChatCompletionMessage{
-		{
-			Role:    openai.ChatMessageRoleSystem,
-			Content: systemPrompt,
-		},
-		{
-			Role:    openai.ChatMessageRoleUser,
-			Content: msg.Content,
-		},
+	// 4. Build context with history and files if session_id provided
+	var messages []openai.ChatCompletionMessage
+	if msg.SessionID != "" {
+		// Use context service to build messages with history and files
+		messages, err = ctrl.contextService.BuildContextWithFiles(
+			msg.SessionID,
+			systemPrompt,
+			msg.Content,
+			msg.FileIDs,
+			10, // history limit
+		)
+		if err != nil {
+			log.Printf("⚠️  Failed to build context with history: %v", err)
+			// Fallback to simple messages
+			messages = []openai.ChatCompletionMessage{
+				{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
+				{Role: openai.ChatMessageRoleUser, Content: msg.Content},
+			}
+		}
+	} else {
+		// No session - simple messages without history
+		messages = []openai.ChatCompletionMessage{
+			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
+			{Role: openai.ChatMessageRoleUser, Content: msg.Content},
+		}
 	}
 
 	// 5. Call OpenAI streaming API
@@ -172,9 +199,22 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 streamDone:
 	// 7. Save user message to database
 	userMessage := &models.Message{
+		SessionID: msg.SessionID,
 		Role:      models.RoleUser,
 		Content:   msg.Content,
 		PersonaID: &personaID,
+	}
+
+	// Add file attachments if provided
+	if len(msg.FileIDs) > 0 {
+		attachments, err := ctrl.buildFileAttachments(msg.FileIDs)
+		if err != nil {
+			log.Printf("⚠️  Warning: Failed to build file attachments: %v", err)
+		} else if len(attachments) > 0 {
+			if err := userMessage.SetFileAttachments(attachments); err != nil {
+				log.Printf("⚠️  Warning: Failed to set file attachments: %v", err)
+			}
+		}
 	}
 
 	if err := ctrl.messageRepo.Create(userMessage); err != nil {
@@ -186,6 +226,7 @@ streamDone:
 	tokensUsed := len(fullContent) / 4 // Rough estimate
 
 	assistantMessage := &models.Message{
+		SessionID:  msg.SessionID,
 		Role:       models.RoleAssistant,
 		Content:    fullContent,
 		PersonaID:  &personaID,
@@ -231,4 +272,27 @@ func (ctrl *WebSocketController) sendError(c *websocket.Conn, errorMsg string) e
 		"type":  "error",
 		"error": errorMsg,
 	})
+}
+
+// buildFileAttachments fetches file analysis and builds FileAttachment array
+func (ctrl *WebSocketController) buildFileAttachments(fileIDs []string) ([]models.FileAttachment, error) {
+	attachments := make([]models.FileAttachment, 0, len(fileIDs))
+
+	for _, fileID := range fileIDs {
+		analysis, err := ctrl.fileAnalysisRepo.FindByID(fileID)
+		if err != nil {
+			log.Printf("⚠️  Warning: File not found for ID %s: %v", fileID, err)
+			continue
+		}
+
+		attachments = append(attachments, models.FileAttachment{
+			FileID:          fileID,
+			Filename:        analysis.FileName,
+			FileType:        analysis.FileType,
+			FileSize:        analysis.FileSize,
+			AnalysisSummary: analysis.Summary,
+		})
+	}
+
+	return attachments, nil
 }

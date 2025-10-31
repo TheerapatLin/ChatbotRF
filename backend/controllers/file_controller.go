@@ -43,7 +43,7 @@ type AnalyzeFileRequest struct {
 // AnalyzeFile handles POST /api/file/analyze endpoint
 func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 	// 1. Parse and validate file upload
-	file, analysisType, prompt, language, err := ctrl.parseFileRequest(c)
+	file, analysisType, prompt, language, sessionID, err := ctrl.parseFileRequest(c)
 	if err != nil {
 		return err
 	}
@@ -67,8 +67,8 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 		return ctrl.handleAnalysisError(c, err)
 	}
 
-	// 4. Save to database
-	if err := ctrl.saveFileAnalysis(result, analysisType, prompt, language); err != nil {
+	// 4. Save to database with session_id
+	if err := ctrl.saveFileAnalysis(result, analysisType, prompt, language, sessionID); err != nil {
 		log.Printf("⚠️  Failed to save file analysis to database: %v", err)
 	}
 
@@ -76,12 +76,15 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 }
 
 // parseFileRequest parses and validates file upload request
-func (ctrl *FileController) parseFileRequest(c *fiber.Ctx) (*multipart.FileHeader, string, string, string, error) {
+func (ctrl *FileController) parseFileRequest(c *fiber.Ctx) (*multipart.FileHeader, string, string, string, string, error) {
 	// Get file from multipart form
 	file, err := c.FormFile("file")
 	if err != nil {
-		return nil, "", "", "", utils.BadRequest(c, "file is required")
+		return nil, "", "", "", "", utils.BadRequest(c, "file is required")
 	}
+
+	// Get session_id (optional) - NEW
+	sessionID := c.FormValue("session_id")
 
 	// Get analysis type with default
 	analysisType := c.FormValue("analysis_type")
@@ -99,7 +102,7 @@ func (ctrl *FileController) parseFileRequest(c *fiber.Ctx) (*multipart.FileHeade
 		}
 	}
 	if !isValid {
-		return nil, "", "", "", utils.BadRequest(c, "invalid analysis_type. Allowed: summary, detail, qa, extract")
+		return nil, "", "", "", "", utils.BadRequest(c, "invalid analysis_type. Allowed: summary, detail, qa, extract")
 	}
 
 	// Get optional parameters
@@ -109,7 +112,7 @@ func (ctrl *FileController) parseFileRequest(c *fiber.Ctx) (*multipart.FileHeade
 		language = "th"
 	}
 
-	return file, analysisType, prompt, language, nil
+	return file, analysisType, prompt, language, sessionID, nil
 }
 
 // analyzeImageFile handles image file analysis using Vision API
@@ -170,12 +173,13 @@ func (ctrl *FileController) handleAnalysisError(c *fiber.Ctx, err error) error {
 }
 
 // saveFileAnalysis saves analysis result to database
-func (ctrl *FileController) saveFileAnalysis(result *services.FileAnalysisResponse, analysisType, prompt, language string) error {
+func (ctrl *FileController) saveFileAnalysis(result *services.FileAnalysisResponse, analysisType, prompt, language, sessionID string) error {
 	if ctrl.repository == nil {
 		return nil
 	}
 
 	fileAnalysis := &models.FileAnalysis{
+		SessionID:     sessionID, // NEW - Link to conversation session
 		FileName:      sanitizeUTF8(result.FileName),
 		FileType:      result.FileType,
 		FileSize:      result.FileSize,
@@ -196,7 +200,11 @@ func (ctrl *FileController) saveFileAnalysis(result *services.FileAnalysisRespon
 	}
 
 	result.FileID = fileAnalysis.ID.String()
-	log.Printf("✅ File analysis saved to database with ID: %s", result.FileID)
+	if sessionID != "" {
+		log.Printf("✅ File analysis saved to database with ID: %s (session: %s)", result.FileID, sessionID)
+	} else {
+		log.Printf("✅ File analysis saved to database with ID: %s", result.FileID)
+	}
 	return nil
 }
 

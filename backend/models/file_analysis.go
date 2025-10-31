@@ -11,6 +11,7 @@ import (
 // FileAnalysis represents a file analysis record in the database
 type FileAnalysis struct {
 	ID              uuid.UUID      `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
+	SessionID       string         `gorm:"type:varchar(100);index" json:"session_id,omitempty"` // NEW - Link to conversation session
 	FileName        string         `gorm:"type:varchar(255);not null" json:"filename"`
 	FileType        string         `gorm:"type:varchar(100)" json:"file_type"`
 	FileSize        int64          `gorm:"not null" json:"file_size"`

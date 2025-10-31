@@ -32,6 +32,15 @@ func (r *FileAnalysisRepository) GetByID(id uuid.UUID) (*models.FileAnalysis, er
 	return &analysis, nil
 }
 
+// FindByID retrieves a file analysis by ID string
+func (r *FileAnalysisRepository) FindByID(id string) (*models.FileAnalysis, error) {
+	fileID, err := uuid.Parse(id)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByID(fileID)
+}
+
 // GetAll retrieves all file analyses with pagination
 func (r *FileAnalysisRepository) GetAll(limit, offset int) ([]models.FileAnalysis, int64, error) {
 	var analyses []models.FileAnalysis
@@ -135,6 +144,35 @@ func (r *FileAnalysisRepository) SearchByFileName(filename string, limit, offset
 	}
 
 	return analyses, total, nil
+}
+
+// GetBySessionID retrieves all file analyses for a specific session
+func (r *FileAnalysisRepository) GetBySessionID(sessionID string) ([]models.FileAnalysis, error) {
+	var analyses []models.FileAnalysis
+	err := r.db.Where("session_id = ?", sessionID).
+		Order("created_at DESC").
+		Find(&analyses).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return analyses, nil
+}
+
+// GetRecentBySessionID retrieves recent file analyses for a session with limit
+func (r *FileAnalysisRepository) GetRecentBySessionID(sessionID string, limit int) ([]models.FileAnalysis, error) {
+	var analyses []models.FileAnalysis
+	err := r.db.Where("session_id = ?", sessionID).
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&analyses).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return analyses, nil
 }
 
 // GetStatistics returns analysis statistics

@@ -24,10 +24,10 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	fileService := services.NewFileService(openaiService.GetClient())
 
 	// Initialize controllers
-	chatCtrl := controllers.NewChatController(messageRepo, personaRepo, openaiService)
+	chatCtrl := controllers.NewChatController(messageRepo, personaRepo, fileAnalysisRepo, openaiService)
 	personaCtrl := controllers.NewPersonaController(personaRepo, messageRepo)
 	audioCtrl := controllers.NewAudioController(openaiService, ttsService)
-	wsCtrl := controllers.NewWebSocketController(messageRepo, personaRepo, openaiService)
+	wsCtrl := controllers.NewWebSocketController(messageRepo, personaRepo, fileAnalysisRepo, openaiService)
 	fileCtrl := controllers.NewFileController(fileService, fileAnalysisRepo)
 
 	// API group
