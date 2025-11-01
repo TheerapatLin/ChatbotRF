@@ -20,13 +20,15 @@ import (
 
 // FileService handles file analysis operations
 type FileService struct {
-	openaiClient *openai.Client
+	openaiClient   *openai.Client
+	contextService *ContextService
 }
 
 // NewFileService creates a new file service
-func NewFileService(client *openai.Client) *FileService {
+func NewFileService(client *openai.Client, contextService *ContextService) *FileService {
 	return &FileService{
-		openaiClient: client,
+		openaiClient:   client,
+		contextService: contextService,
 	}
 }
 
@@ -36,6 +38,9 @@ type FileAnalysisRequest struct {
 	AnalysisType string // summary, detail, qa, extract
 	Prompt       string
 	Language     string // th, en
+	SystemPrompt string // Optional custom system prompt
+	SessionID    string // Session ID for conversation history
+	UseHistory   bool   // Include conversation history in analysis
 }
 
 // FileAnalysisResponse represents the analysis response
@@ -176,21 +181,41 @@ func (s *FileService) AnalyzeFile(ctx context.Context, req FileAnalysisRequest) 
 	// Build analysis prompt
 	prompt := s.buildAnalysisPrompt(req.AnalysisType, req.Prompt, req.Language, text)
 
+	// Build messages array with optional system prompt
+	var messages []openai.ChatCompletionMessage
+
+	// If UseHistory is enabled and SessionID is provided, build context with conversation history
+	if req.UseHistory && req.SessionID != "" && s.contextService != nil {
+		// Build system prompt (use custom or default)
+		systemPrompt := req.SystemPrompt
+		if systemPrompt == "" {
+			systemPrompt = "You are a document analysis expert. Provide clear, accurate, and structured analysis."
+		}
+
+		// Use context service to build messages with history
+		var err error
+		messages, err = s.contextService.BuildContextWithHistory(
+			req.SessionID,
+			systemPrompt,
+			prompt,
+			10, // last 10 messages
+		)
+		if err != nil {
+			fmt.Printf("⚠️  Failed to build context with history: %v, falling back to simple context\n", err)
+			// Fallback to simple context
+			messages = s.buildSimpleContext(req.SystemPrompt, prompt)
+		}
+	} else {
+		// Build simple context without history
+		messages = s.buildSimpleContext(req.SystemPrompt, prompt)
+	}
+
 	// Call OpenAI API
 	chatResp, err := s.openaiClient.CreateChatCompletion(
 		ctx,
 		openai.ChatCompletionRequest{
-			Model: openai.GPT4oMini,
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleSystem,
-					Content: "You are a document analysis expert. Provide clear, accurate, and structured analysis.",
-				},
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: prompt,
-				},
-			},
+			Model:       openai.GPT4oMini,
+			Messages:    messages,
 			Temperature: 0.7,
 			MaxTokens:   2000,
 		},
@@ -276,7 +301,7 @@ func (s *FileService) extractText(file io.Reader, fileHeader *multipart.FileHead
 }
 
 // AnalyzeImage analyzes an image file using OpenAI Vision API
-func (s *FileService) AnalyzeImage(ctx context.Context, file io.Reader, filename string, prompt string) (string, error) {
+func (s *FileService) AnalyzeImage(ctx context.Context, file io.Reader, filename string, prompt string, systemPrompt string) (string, error) {
 	// Read image data
 	imageData, err := io.ReadAll(file)
 	if err != nil {
@@ -301,28 +326,40 @@ func (s *FileService) AnalyzeImage(ctx context.Context, file io.Reader, filename
 		prompt = "Describe this image in detail. What do you see?"
 	}
 
+	// Build messages array with optional system prompt
+	messages := []openai.ChatCompletionMessage{}
+
+	// Add system prompt if provided
+	if systemPrompt != "" {
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: systemPrompt,
+		})
+	}
+
+	// Add user message with image
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role: openai.ChatMessageRoleUser,
+		MultiContent: []openai.ChatMessagePart{
+			{
+				Type: openai.ChatMessagePartTypeText,
+				Text: prompt,
+			},
+			{
+				Type: openai.ChatMessagePartTypeImageURL,
+				ImageURL: &openai.ChatMessageImageURL{
+					URL: fmt.Sprintf("data:image/%s;base64,%s", imageFormat, base64Image),
+				},
+			},
+		},
+	})
+
 	// Call Vision API
 	resp, err := s.openaiClient.CreateChatCompletion(
 		ctx,
 		openai.ChatCompletionRequest{
-			Model: openai.GPT4oMini,
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role: openai.ChatMessageRoleUser,
-					MultiContent: []openai.ChatMessagePart{
-						{
-							Type: openai.ChatMessagePartTypeText,
-							Text: prompt,
-						},
-						{
-							Type: openai.ChatMessagePartTypeImageURL,
-							ImageURL: &openai.ChatMessageImageURL{
-								URL: fmt.Sprintf("data:image/%s;base64,%s", imageFormat, base64Image),
-							},
-						},
-					},
-				},
-			},
+			Model:     openai.GPT4oMini,
+			Messages:  messages,
 			MaxTokens: 1000,
 		},
 	)
@@ -386,6 +423,28 @@ func (s *FileService) buildAnalysisPrompt(analysisType, customPrompt, language, 
 	prompt.WriteString(text)
 
 	return prompt.String()
+}
+
+// buildSimpleContext builds a simple message context without history
+func (s *FileService) buildSimpleContext(systemPrompt, userPrompt string) []openai.ChatCompletionMessage {
+	messages := []openai.ChatCompletionMessage{}
+
+	// Add system prompt (use custom or default)
+	if systemPrompt == "" {
+		systemPrompt = "You are a document analysis expert. Provide clear, accurate, and structured analysis."
+	}
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleSystem,
+		Content: systemPrompt,
+	})
+
+	// Add user message with analysis prompt
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleUser,
+		Content: userPrompt,
+	})
+
+	return messages
 }
 
 // Helper functions

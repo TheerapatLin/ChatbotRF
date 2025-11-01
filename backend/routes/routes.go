@@ -21,7 +21,8 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	// Initialize services
 	openaiService := services.NewOpenAIService(cfg)
 	ttsService := services.NewTTSService(cfg)
-	fileService := services.NewFileService(openaiService.GetClient())
+	contextService := services.NewContextService(messageRepo, fileAnalysisRepo)
+	fileService := services.NewFileService(openaiService.GetClient(), contextService)
 
 	// Initialize controllers
 	chatCtrl := controllers.NewChatController(messageRepo, personaRepo, fileAnalysisRepo, openaiService)

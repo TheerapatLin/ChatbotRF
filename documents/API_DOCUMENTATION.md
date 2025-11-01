@@ -304,6 +304,8 @@ Analyze uploaded file with AI.
 | `session_id` | string | No | null | Link to conversation session |
 | `prompt` | string | No | "" | Custom analysis instructions |
 | `language` | string | No | th | `th` or `en` |
+| `system_prompt` | string | No | "" | Custom system prompt for AI |
+| `use_history` | boolean | No | false | Include conversation history in analysis |
 
 **Supported File Types**:
 
@@ -347,19 +349,29 @@ Analyze uploaded file with AI.
 
 **Example**:
 ```bash
-# Analyze PDF with custom prompt
+# Analyze PDF with custom prompt and system prompt
 curl -X POST http://localhost:3001/api/file/analyze \
   -F "file=@contract.pdf" \
   -F "analysis_type=detail" \
   -F "prompt=Extract key terms, obligations, and dates" \
   -F "language=th" \
+  -F "system_prompt=You are a legal expert. Analyze contracts thoroughly." \
   -F "session_id=session_001"
 
-# Analyze image
+# Analyze file with conversation history context
+curl -X POST http://localhost:3001/api/file/analyze \
+  -F "file=@data.xlsx" \
+  -F "analysis_type=summary" \
+  -F "session_id=session_001" \
+  -F "use_history=true" \
+  -F "prompt=Analyze this data in context of our previous conversation"
+
+# Analyze image with system prompt
 curl -X POST http://localhost:3001/api/file/analyze \
   -F "file=@chart.png" \
   -F "analysis_type=summary" \
-  -F "prompt=Explain this chart"
+  -F "prompt=Explain this chart" \
+  -F "system_prompt=You are a data visualization expert."
 ```
 
 #### `GET /file/history`

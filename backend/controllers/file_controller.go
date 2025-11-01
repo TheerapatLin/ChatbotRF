@@ -43,7 +43,7 @@ type AnalyzeFileRequest struct {
 // AnalyzeFile handles POST /api/file/analyze endpoint
 func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 	// 1. Parse and validate file upload
-	file, analysisType, prompt, language, sessionID, err := ctrl.parseFileRequest(c)
+	file, analysisType, prompt, language, sessionID, systemPrompt, useHistory, err := ctrl.parseFileRequest(c)
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 	// 2. Handle image files with Vision API
 	contentType := file.Header.Get("Content-Type")
 	if strings.Contains(contentType, "image/") {
-		return ctrl.analyzeImageFile(c, file, contentType, prompt, language)
+		return ctrl.analyzeImageFile(c, file, contentType, prompt, language, systemPrompt)
 	}
 
 	// 3. Analyze text-based file
@@ -60,6 +60,9 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 		AnalysisType: analysisType,
 		Prompt:       prompt,
 		Language:     language,
+		SystemPrompt: systemPrompt,
+		SessionID:    sessionID,
+		UseHistory:   useHistory,
 	}
 
 	result, err := ctrl.fileService.AnalyzeFile(c.Context(), req)
@@ -76,14 +79,14 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 }
 
 // parseFileRequest parses and validates file upload request
-func (ctrl *FileController) parseFileRequest(c *fiber.Ctx) (*multipart.FileHeader, string, string, string, string, error) {
+func (ctrl *FileController) parseFileRequest(c *fiber.Ctx) (*multipart.FileHeader, string, string, string, string, string, bool, error) {
 	// Get file from multipart form
 	file, err := c.FormFile("file")
 	if err != nil {
-		return nil, "", "", "", "", utils.BadRequest(c, "file is required")
+		return nil, "", "", "", "", "", false, utils.BadRequest(c, "file is required")
 	}
 
-	// Get session_id (optional) - NEW
+	// Get session_id (optional)
 	sessionID := c.FormValue("session_id")
 
 	// Get analysis type with default
@@ -102,7 +105,7 @@ func (ctrl *FileController) parseFileRequest(c *fiber.Ctx) (*multipart.FileHeade
 		}
 	}
 	if !isValid {
-		return nil, "", "", "", "", utils.BadRequest(c, "invalid analysis_type. Allowed: summary, detail, qa, extract")
+		return nil, "", "", "", "", "", false, utils.BadRequest(c, "invalid analysis_type. Allowed: summary, detail, qa, extract")
 	}
 
 	// Get optional parameters
@@ -112,11 +115,17 @@ func (ctrl *FileController) parseFileRequest(c *fiber.Ctx) (*multipart.FileHeade
 		language = "th"
 	}
 
-	return file, analysisType, prompt, language, sessionID, nil
+	// Get optional system_prompt
+	systemPrompt := c.FormValue("system_prompt")
+
+	// Get optional use_history (default: false)
+	useHistory := c.FormValue("use_history") == "true"
+
+	return file, analysisType, prompt, language, sessionID, systemPrompt, useHistory, nil
 }
 
 // analyzeImageFile handles image file analysis using Vision API
-func (ctrl *FileController) analyzeImageFile(c *fiber.Ctx, file *multipart.FileHeader, contentType, prompt, language string) error {
+func (ctrl *FileController) analyzeImageFile(c *fiber.Ctx, file *multipart.FileHeader, contentType, prompt, language, systemPrompt string) error {
 	// Open file
 	fileData, err := file.Open()
 	if err != nil {
@@ -124,8 +133,8 @@ func (ctrl *FileController) analyzeImageFile(c *fiber.Ctx, file *multipart.FileH
 	}
 	defer fileData.Close()
 
-	// Analyze image
-	analysis, err := ctrl.fileService.AnalyzeImage(c.Context(), fileData, file.Filename, prompt)
+	// Analyze image (pass systemPrompt to service if needed)
+	analysis, err := ctrl.fileService.AnalyzeImage(c.Context(), fileData, file.Filename, prompt, systemPrompt)
 	if err != nil {
 		return utils.InternalError(c, fmt.Sprintf("failed to analyze image: %v", err))
 	}
