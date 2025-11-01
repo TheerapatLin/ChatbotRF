@@ -1,179 +1,127 @@
 # ChatBot API Documentation
 
-**Base URL**: `http://localhost:3000/api`
-**Version**: 1.2.0
-**Last Updated**: 2025-10-31
+**Base URL**: `http://localhost:3001/api`
+**Version**: 2.0.0
+**Last Updated**: 2025-11-01
+**Database**: PostgreSQL with UUID-based IDs
+**AI Models**: OpenAI GPT-4o-mini, Whisper-1, TTS-1, Vision
 
 ---
 
-## Table of Contents
+## 📑 Table of Contents
 
-- [Response Format & Error Handling](#response-format--error-handling)
-- [Health Check](#health-check)
-- [Chat Endpoints](#chat-endpoints)
-- [Persona Endpoints](#persona-endpoints)
-- [File Analysis Endpoints](#file-analysis-endpoints)
-- [Audio Endpoints](#audio-endpoints)
-- [WebSocket API](#websocket-api)
+1. [Quick Start](#quick-start)
+2. [Authentication & Headers](#authentication--headers)
+3. [Response Format](#response-format)
+4. [API Endpoints](#api-endpoints)
+   - [Health Check](#health-check)
+   - [Personas](#personas)
+   - [Chat](#chat)
+   - [File Analysis](#file-analysis)
+   - [Audio](#audio)
+   - [WebSocket Streaming](#websocket-streaming)
+5. [Database Models](#database-models)
+6. [Error Handling](#error-handling)
+7. [Best Practices](#best-practices)
 
 ---
 
-## Response Format & Error Handling
+## 🚀 Quick Start
+
+```bash
+# 1. Check API health
+curl http://localhost:3001/api/health
+
+# 2. List personas
+curl http://localhost:3001/api/personas
+
+# 3. Send a chat message
+curl -X POST http://localhost:3001/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Hello!",
+    "session_id": "session_001",
+    "use_history": true
+  }'
+
+# 4. Analyze a file
+curl -X POST http://localhost:3001/api/file/analyze \
+  -F "file=@document.pdf" \
+  -F "analysis_type=summary" \
+  -F "session_id=session_001"
+```
+
+---
+
+## 🔐 Authentication & Headers
+
+**Current Version**: No authentication required
+**CORS Enabled**: `http://localhost:5173` (Frontend)
+
+**Recommended Headers**:
+```
+Content-Type: application/json
+Accept: application/json
+```
+
+---
+
+## 📦 Response Format
 
 ### Success Response
 ```json
 {
-  "data": { ... }
+  "field1": "value1",
+  "field2": "value2"
 }
 ```
 
 ### Error Response
 ```json
 {
-  "error": "Error message description"
+  "error": "Descriptive error message"
 }
 ```
 
 ### HTTP Status Codes
 
-| Status | Meaning |
-|--------|---------|
-| `200` | OK - Success |
-| `400` | Bad Request - Invalid input |
-| `404` | Not Found - Resource not found |
-| `413` | Payload Too Large - File too large |
-| `415` | Unsupported Media Type - Invalid file type |
-| `422` | Unprocessable Entity - Cannot process request |
-| `500` | Internal Server Error - Server error |
-| `503` | Service Unavailable - External service error |
+| Code | Meaning |
+|------|---------|
+| 200  | Success |
+| 400  | Bad Request - Invalid input |
+| 404  | Not Found - Resource doesn't exist |
+| 413  | Payload Too Large - File exceeds limit |
+| 415  | Unsupported Media Type - Invalid file type |
+| 422  | Unprocessable Entity - Cannot parse file |
+| 500  | Internal Server Error |
+| 503  | Service Unavailable - OpenAI API issue |
 
 ---
 
-## Health Check
+## 📡 API Endpoints
 
-### Check API Status
+### Health Check
 
-**Endpoint**: `GET /health`
+#### `GET /health`
+Check if API is running.
 
 **Response**:
 ```json
 {
   "status": "ok",
-  "timestamp": "2025-10-31T10:30:00Z"
+  "message": "ChatBot API is running",
+  "env": "development"
 }
 ```
 
 ---
 
-## Chat Endpoints
+### Personas
 
-### 1. Send Chat Message
+AI personalities with predefined system prompts.
 
-**Endpoint**: `POST /api/chat`
-
-**Request Body**:
-```json
-{
-  "message": "Hello, how are you?",
-  "session_id": "user_session_123",
-  "persona_id": 1,
-  "system_prompt": "You are a helpful assistant",
-  "use_history": true,
-  "temperature": 0.7,
-  "max_tokens": 1000,
-  "model": "gpt-4o-mini"
-}
-```
-
-**Parameters**:
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `message` | string | Yes | - | User's message |
-| `session_id` | string | No | auto-generated | Session ID for conversation history |
-| `persona_id` | integer | No | null | Persona ID to use |
-| `system_prompt` | string | No | "" | Custom system prompt (overrides persona) |
-| `use_history` | boolean | No | false | Include conversation history in context |
-| `temperature` | float | No | 0.7 | Response creativity (0.0-2.0) |
-| `max_tokens` | integer | No | - | Maximum response length |
-| `model` | string | No | "gpt-4o-mini" | OpenAI model to use |
-
-**Response**:
-```json
-{
-  "message_id": "uuid",
-  "session_id": "user_session_123",
-  "reply": "I'm doing well, thank you!",
-  "persona": {
-    "id": 1,
-    "name": "General Assistant",
-    "expertise": "General knowledge",
-    "icon": "🤖",
-    "description": "Helpful AI assistant"
-  },
-  "tokens_used": 45,
-  "model": "gpt-4o-mini",
-  "timestamp": "2025-10-31T10:30:00Z",
-  "history_used": true,
-  "history_count": 4
-}
-```
-
-**Notes**:
-- When `use_history: true`, the API maintains conversation context using `session_id`
-- `history_count` shows the number of previous messages included in the context
-- For better AI compliance with Thai language prompts, use English with clear instructions:
-
-```json
-{
-  "system_prompt": "You MUST respond in Thai language. You are a professional consultant. Always provide structured answers with: 1) Summary 2) Details 3) Recommendations."
-}
-```
-
-**Example**:
-```bash
-curl -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "What is AI?",
-    "session_id": "session_001",
-    "use_history": true
-  }'
-```
-
-### 2. Get Chat History
-
-**Endpoint**: `GET /api/chat/history`
-
-**Query Parameters**:
-- `limit` (default: 50, max: 100) - Number of messages
-- `offset` (default: 0) - Pagination offset
-
-**Response**:
-```json
-{
-  "messages": [
-    {
-      "id": "uuid",
-      "role": "user",
-      "content": "Hello",
-      "persona_id": 1,
-      "created_at": "2025-10-31T10:30:00Z"
-    }
-  ],
-  "total": 150,
-  "limit": 50,
-  "offset": 0
-}
-```
-
----
-
-## Persona Endpoints
-
-### 1. List All Personas
-
-**Endpoint**: `GET /api/personas`
+#### `GET /personas`
+List all active personas.
 
 **Response**:
 ```json
@@ -182,39 +130,168 @@ curl -X POST http://localhost:3000/api/chat \
     {
       "id": 1,
       "name": "General Assistant",
-      "expertise": "General knowledge",
+      "system_prompt": "You are a helpful, friendly AI assistant...",
+      "expertise": "general",
+      "description": "A versatile AI assistant for general questions",
       "icon": "🤖",
-      "description": "Helpful AI assistant for general queries"
+      "is_active": true,
+      "created_at": "2024-01-15T10:30:00Z"
+    },
+    {
+      "id": 2,
+      "name": "Technology Expert",
+      "expertise": "technology",
+      "icon": "💻"
+    },
+    {
+      "id": 3,
+      "name": "Business Advisor",
+      "expertise": "business",
+      "icon": "💼"
     }
-  ],
-  "total": 3
+  ]
 }
 ```
 
-### 2. Get Persona Details
-
-**Endpoint**: `GET /api/personas/:id`
+#### `GET /personas/:id`
+Get persona details with usage statistics.
 
 **Response**:
 ```json
 {
   "id": 1,
   "name": "General Assistant",
-  "expertise": "General knowledge",
+  "system_prompt": "You are a helpful...",
+  "expertise": "general",
+  "description": "...",
   "icon": "🤖",
-  "description": "Helpful AI assistant",
-  "system_prompt": "You are a helpful assistant...",
-  "created_at": "2025-01-01T00:00:00Z"
+  "is_active": true,
+  "created_at": "2024-01-15T10:30:00Z",
+  "stats": {
+    "total_messages": 42,
+    "avg_response_time": "2.3s"
+  }
 }
 ```
 
 ---
 
-## File Analysis Endpoints
+### Chat
 
-### 1. Analyze File
+Send messages and receive AI responses.
 
-**Endpoint**: `POST /api/file/analyze`
+#### `POST /chat`
+Send chat message with optional conversation history and file attachments.
+
+**Request**:
+```json
+{
+  "message": "What is machine learning?",
+  "session_id": "session_123",
+  "persona_id": 2,
+  "system_prompt": "You are a teacher",
+  "use_history": true,
+  "temperature": 0.7,
+  "max_tokens": 2000,
+  "model": "gpt-4o-mini",
+  "file_ids": ["uuid1", "uuid2"]
+}
+```
+
+**Parameters**:
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `message` | string | ✅ Yes | - | User's message content |
+| `session_id` | string | No | auto-generated | Session ID for conversation tracking |
+| `persona_id` | int | No | null | Persona to use (1, 2, or 3) |
+| `system_prompt` | string | No | "" | Custom prompt (overrides persona) |
+| `use_history` | bool | No | false | Include conversation history |
+| `temperature` | float | No | 0.7 | Creativity (0.0-2.0) |
+| `max_tokens` | int | No | 2000 | Max response length |
+| `model` | string | No | gpt-4o-mini | OpenAI model |
+| `file_ids` | array | No | [] | File UUIDs to include (max 5) |
+
+**Response**:
+```json
+{
+  "message_id": "uuid-here",
+  "session_id": "session_123",
+  "reply": "Machine learning is a subset of AI...",
+  "persona": {
+    "id": 2,
+    "name": "Technology Expert",
+    "expertise": "technology",
+    "icon": "💻",
+    "description": "..."
+  },
+  "tokens_used": 145,
+  "model": "gpt-4o-mini",
+  "timestamp": "2024-11-01T12:30:00Z",
+  "history_used": true,
+  "history_count": 8
+}
+```
+
+**Notes**:
+- **Max 5 files** per message
+- File context automatically included from `file_ids`
+- History limit: 10 recent messages
+- Backend will fetch file analysis content and include in context
+
+#### `GET /chat/history`
+Retrieve chat history with pagination.
+
+**Query Parameters**:
+- `limit` (default: 50, max: 100)
+- `offset` (default: 0)
+
+**Response**:
+```json
+{
+  "messages": [
+    {
+      "id": "uuid",
+      "session_id": "session_123",
+      "role": "user",
+      "content": "Hello",
+      "persona_id": 1,
+      "tokens_used": null,
+      "file_attachments": [
+        {
+          "file_id": "uuid",
+          "filename": "doc.pdf",
+          "file_type": "application/pdf",
+          "file_size": 102400,
+          "analysis_summary": "Summary of the file..."
+        }
+      ],
+      "created_at": "2024-11-01T12:00:00Z"
+    },
+    {
+      "id": "uuid",
+      "role": "assistant",
+      "content": "Hi there!",
+      "persona_id": 1,
+      "tokens_used": 15,
+      "file_attachments": null,
+      "created_at": "2024-11-01T12:01:00Z"
+    }
+  ],
+  "total": 247,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+---
+
+### File Analysis
+
+Upload and analyze documents using AI.
+
+#### `POST /file/analyze`
+Analyze uploaded file with AI.
 
 **Content-Type**: `multipart/form-data`
 
@@ -222,62 +299,76 @@ curl -X POST http://localhost:3000/api/chat \
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `file` | file | Yes | - | File to analyze |
-| `analysis_type` | string | No | "summary" | Analysis type: `summary`, `detail`, `qa`, `extract` |
+| `file` | file | ✅ Yes | - | File to analyze |
+| `analysis_type` | string | No | summary | `summary`, `detail`, `qa`, `extract` |
+| `session_id` | string | No | null | Link to conversation session |
 | `prompt` | string | No | "" | Custom analysis instructions |
-| `language` | string | No | "th" | Response language: `th`, `en` |
+| `language` | string | No | th | `th` or `en` |
 
 **Supported File Types**:
-- **Documents**: PDF, DOCX, TXT, MD, CSV (max 10MB)
-- **Images**: PNG, JPG, JPEG, GIF, WEBP (max 20MB, uses Vision API)
+
+| Type | Extensions | Max Size |
+|------|-----------|----------|
+| Text | .txt, .md | 10 MB |
+| Documents | .pdf | 25 MB |
+| Office | .docx, .xlsx, .pptx | 25 MB |
+| Images | .jpg, .png, .gif, .webp | 20 MB |
+| Code | .js, .py, .go, .java | 5 MB |
+| Data | .json, .xml, .csv | 10 MB |
 
 **Analysis Types**:
-- `summary` - Brief overview of content
+- `summary` - Brief overview
 - `detail` - Comprehensive analysis with key points
-- `qa` - Question-answering format
-- `extract` - Extract structured data and entities
+- `qa` - Question-answer format
+- `extract` - Extract entities and structured data
 
 **Response**:
 ```json
 {
-  "file_id": "uuid",
+  "file_id": "uuid-here",
   "filename": "document.pdf",
   "file_type": "application/pdf",
-  "file_size": 245678,
-  "analysis": "This document discusses...",
-  "summary": "Brief overview",
-  "key_points": ["Point 1", "Point 2"],
-  "entities": ["Name", "Company"],
-  "sentiment": "neutral",
+  "file_size": 102400,
+  "analysis": "This document discusses the quarterly financial results...",
+  "summary": "Q3 financial report showing 15% revenue growth...",
+  "key_points": [
+    "Revenue increased 15% YoY",
+    "Operating margin improved to 28%",
+    "Customer base grew by 10,000 users"
+  ],
+  "entities": ["Q3 2024", "ABC Corporation", "$5.2M"],
+  "sentiment": "positive",
   "language": "th",
-  "tokens_used": 1234,
-  "process_time": 2500
+  "tokens_used": 450,
+  "process_time_ms": 2345.67,
+  "timestamp": "2024-11-01T12:30:00Z"
 }
 ```
 
 **Example**:
 ```bash
-# Analyze PDF
-curl -X POST http://localhost:3000/api/file/analyze \
-  -F "file=@report.pdf" \
-  -F "analysis_type=summary" \
-  -F "language=th"
-
-# Analyze Image
-curl -X POST http://localhost:3000/api/file/analyze \
-  -F "file=@diagram.png" \
+# Analyze PDF with custom prompt
+curl -X POST http://localhost:3001/api/file/analyze \
+  -F "file=@contract.pdf" \
   -F "analysis_type=detail" \
-  -F "prompt=Explain this diagram"
+  -F "prompt=Extract key terms, obligations, and dates" \
+  -F "language=th" \
+  -F "session_id=session_001"
+
+# Analyze image
+curl -X POST http://localhost:3001/api/file/analyze \
+  -F "file=@chart.png" \
+  -F "analysis_type=summary" \
+  -F "prompt=Explain this chart"
 ```
 
-### 2. Get File Analysis History
-
-**Endpoint**: `GET /api/file/history`
+#### `GET /file/history`
+Retrieve file analysis history.
 
 **Query Parameters**:
 - `limit` (default: 20, max: 100)
 - `offset` (default: 0)
-- `file_type` (optional) - Filter by file type or "all"
+- `file_type` (optional) - Filter by MIME type
 
 **Response**:
 ```json
@@ -285,16 +376,16 @@ curl -X POST http://localhost:3000/api/file/analyze \
   "files": [
     {
       "file_id": "uuid",
-      "filename": "document.pdf",
+      "filename": "report.pdf",
       "file_type": "application/pdf",
-      "file_size": 245678,
+      "file_size": 102400,
       "analysis_type": "summary",
       "language": "th",
-      "tokens_used": 1234,
-      "created_at": "2025-10-31T10:30:00Z"
+      "tokens_used": 450,
+      "created_at": "2024-11-01T12:30:00Z"
     }
   ],
-  "total": 50,
+  "total": 23,
   "limit": 20,
   "offset": 0
 }
@@ -302,151 +393,138 @@ curl -X POST http://localhost:3000/api/file/analyze \
 
 ---
 
-## Audio Endpoints
+### Audio
 
-### 1. Transcribe Audio (Speech-to-Text)
+Speech-to-text and text-to-speech.
 
-**Endpoint**: `POST /api/audio/transcribe`
+#### `POST /audio/transcribe`
+Convert audio to text using Whisper API.
 
 **Content-Type**: `multipart/form-data`
 
 **Form Fields**:
 - `audio` (required) - Audio file
 
-**Supported Formats**: MP3, MP4, WAV, WEBM, M4A (max 25MB, max 30 minutes)
+**Supported Formats**: MP3, MP4, WAV, WEBM, M4A, OGG, FLAC
+**Max Size**: 25 MB
+**Max Duration**: ~30 minutes
 
 **Response**:
 ```json
 {
-  "text": "Transcribed text from audio",
-  "language": "th",
-  "duration": 45.5,
-  "timestamp": "2025-10-31T10:30:00Z"
+  "text": "Hello, this is a transcription of the audio file",
+  "language": "en",
+  "duration": 0.0,
+  "confidence": 0.95,
+  "timestamp": "2024-11-01T12:30:00Z"
 }
 ```
 
 **Example**:
 ```bash
-curl -X POST http://localhost:3000/api/audio/transcribe \
+curl -X POST http://localhost:3001/api/audio/transcribe \
   -F "audio=@voice.mp3"
 ```
 
-### 2. Text-to-Speech (TTS)
+#### `POST /audio/tts`
+Convert text to speech.
 
-**Endpoint**: `POST /api/audio/tts`
-
-**Request Body**:
+**Request**:
 ```json
 {
-  "text": "Hello world",
+  "text": "สวัสดีครับ",
   "voice": "nova",
   "model": "tts-1",
-  "speed": 1.0,
-  "response_format": "mp3"
+  "response_format": "mp3",
+  "speed": 1.0
 }
 ```
 
 **Parameters**:
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `text` | string | - | Text to convert (max 4096 characters) |
-| `voice` | string | "nova" | Voice: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer` |
-| `model` | string | "tts-1" | Model: `tts-1` (faster), `tts-1-hd` (higher quality) |
-| `speed` | float | 1.0 | Speed: 0.25 to 4.0 |
-| `response_format` | string | "mp3" | Format: `mp3`, `opus`, `aac`, `flac`, `wav`, `pcm` |
+| Field | Type | Default | Options |
+|-------|------|---------|---------|
+| `text` | string | - | Max 4096 characters |
+| `voice` | string | nova | alloy, echo, fable, onyx, nova, shimmer |
+| `model` | string | tts-1 | tts-1, tts-1-hd |
+| `response_format` | string | mp3 | mp3, opus, aac, flac, wav, pcm |
+| `speed` | float | 1.0 | 0.25 - 4.0 |
 
-**Response**: Binary audio file
-
-**Example**:
-```bash
-curl -X POST http://localhost:3000/api/audio/tts \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "Hello world",
-    "voice": "nova"
-  }' \
-  --output speech.mp3
+**Response** (Default - JSON with base64):
+```json
+{
+  "audio_data": "//NExAA...",
+  "format": "mp3",
+  "duration": 1.5,
+  "characters_used": 11,
+  "voice": "nova",
+  "timestamp": "2024-11-01T12:30:00Z"
+}
 ```
 
-**Voice Options**:
+**Alternative Response** (If `Accept: audio/mpeg` header sent):
+- Returns binary audio stream
+- Headers: `Content-Type: audio/mpeg`, `X-Audio-Duration`, `X-Characters-Used`
+
+**Voice Characteristics**:
 
 | Voice | Description |
 |-------|-------------|
-| `alloy` | Neutral, balanced |
-| `echo` | Male voice |
-| `fable` | British accent |
-| `onyx` | Deep male voice |
-| `nova` | Female voice (default) |
-| `shimmer` | Soft female voice |
+| alloy | Neutral, balanced |
+| echo | Male voice |
+| fable | British accent |
+| onyx | Deep male voice |
+| nova | Female voice (recommended) |
+| shimmer | Soft female voice |
 
 ---
 
-## WebSocket API
+### WebSocket Streaming
 
-### Stream Chat Responses
+Real-time streaming chat responses.
 
-**Endpoint**: `WS /api/chat/stream`
+#### `WebSocket /api/chat/stream`
 
-**Client Request**:
+**Connection**:
 ```javascript
-const ws = new WebSocket('ws://localhost:3000/api/chat/stream');
-
-ws.onopen = () => {
-  ws.send(JSON.stringify({
-    message: "Tell me a story",
-    session_id: "test_session",
-    use_history: true,
-    temperature: 0.8
-  }));
-};
-
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-
-  if (data.type === 'start') {
-    console.log('Started:', data);
-  } else if (data.type === 'chunk') {
-    process.stdout.write(data.content); // Stream content
-  } else if (data.type === 'done') {
-    console.log('\nCompleted:', data);
-  } else if (data.type === 'error') {
-    console.error('Error:', data.error);
-  }
-};
+const ws = new WebSocket('ws://localhost:3001/api/chat/stream');
 ```
 
-**Message Types**:
-
-1. **Start Message**:
+**Client → Server Message**:
 ```json
 {
-  "type": "start",
-  "session_id": "test_session",
-  "model": "gpt-4o-mini",
-  "timestamp": "2025-10-31T10:30:00Z"
+  "type": "message",
+  "content": "What is AI?",
+  "session_id": "session_123",
+  "persona_id": 1,
+  "system_prompt": "Optional custom system prompt",
+  "file_ids": ["uuid1", "uuid2"]
 }
 ```
 
-2. **Chunk Message** (streaming content):
+**Server → Client Messages**:
+
+**Chunk (streaming response)**:
 ```json
 {
   "type": "chunk",
-  "content": "partial response text"
+  "content": "AI is",
+  "done": false
 }
 ```
 
-3. **Done Message**:
+**Done (stream complete)**:
 ```json
 {
-  "type": "done",
-  "session_id": "test_session",
-  "tokens_used": 150,
-  "finish_reason": "stop"
+  "type": "chunk",
+  "content": "",
+  "done": true,
+  "message_id": "uuid-here",
+  "tokens_used": 156
 }
 ```
 
-4. **Error Message**:
+**Error**:
 ```json
 {
   "type": "error",
@@ -454,140 +532,298 @@ ws.onmessage = (event) => {
 }
 ```
 
----
+**Features**:
+- Real-time token-by-token streaming
+- Auto-saves messages to database
+- Supports conversation history (last 10 messages)
+- Supports file attachments (max 5 files)
+- Graceful disconnect handling
 
-## Common Use Cases
+**Example**:
+```javascript
+const ws = new WebSocket('ws://localhost:3001/api/chat/stream');
 
-### 1. Simple Chat
-```bash
-curl -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "What is AI?"}'
-```
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    type: 'message',
+    content: 'Tell me a story',
+    session_id: 'session_123',
+    persona_id: 1,
+    file_ids: []
+  }));
+};
 
-### 2. Conversational Chat with History
-```bash
-# First message
-curl -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "My name is John",
-    "session_id": "session_001",
-    "use_history": true
-  }'
+let fullResponse = '';
 
-# Follow-up (AI remembers context)
-curl -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "What is my name?",
-    "session_id": "session_001",
-    "use_history": true
-  }'
-```
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
 
-### 3. Custom Persona Chat
-```bash
-curl -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "Explain async/await",
-    "persona_id": 2,
-    "use_history": true
-  }'
-```
-
-### 4. Analyze PDF Document
-```bash
-curl -X POST http://localhost:3000/api/file/analyze \
-  -F "file=@contract.pdf" \
-  -F "analysis_type=detail" \
-  -F "prompt=Extract key terms and obligations"
-```
-
-### 5. Voice Message Flow
-```bash
-# Step 1: Transcribe audio
-TRANSCRIPT=$(curl -X POST http://localhost:3000/api/audio/transcribe \
-  -F "audio=@question.mp3" | jq -r '.text')
-
-# Step 2: Send to chat
-curl -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d "{\"message\": \"$TRANSCRIPT\"}"
+  if (data.type === 'chunk') {
+    if (data.done) {
+      console.log('\n✅ Complete!');
+      console.log('Message ID:', data.message_id);
+      console.log('Tokens:', data.tokens_used);
+      console.log('Full Response:', fullResponse);
+    } else {
+      process.stdout.write(data.content);
+      fullResponse += data.content;
+    }
+  } else if (data.type === 'error') {
+    console.error('❌ Error:', data.error);
+  }
+};
 ```
 
 ---
 
-## Best Practices
+## 🗄️ Database Models
+
+### Persona
+```
+Table: personas
+- id (int, PK, AUTO_INCREMENT)
+- name (varchar(100))
+- system_prompt (text)
+- expertise (varchar(100))
+- description (text)
+- icon (varchar(50))
+- is_active (boolean, default: true)
+- created_at (timestamp)
+```
+
+### Message
+```
+Table: messages
+- id (uuid, PK, DEFAULT uuid_generate_v4())
+- session_id (varchar(100), INDEXED)
+- role (varchar(20): 'user'|'assistant'|'system')
+- content (text)
+- persona_id (int, FK → personas.id, NULLABLE)
+- tokens_used (int, NULLABLE)
+- file_attachments (jsonb, DEFAULT '[]')
+- metadata (jsonb, DEFAULT '{}')
+- created_at (timestamp)
+```
+
+**file_attachments JSONB structure**:
+```json
+[
+  {
+    "file_id": "uuid",
+    "filename": "document.pdf",
+    "file_type": "application/pdf",
+    "file_size": 102400,
+    "analysis_summary": "First 200 chars..."
+  }
+]
+```
+
+### FileAnalysis
+```
+Table: file_analyses
+- id (uuid, PK, DEFAULT uuid_generate_v4())
+- session_id (varchar(100), INDEXED, NULLABLE)
+- file_name (varchar(255))
+- file_type (varchar(100))
+- file_size (bigint)
+- file_path (varchar(500), NULLABLE)
+- analysis_type (varchar(50): summary|detail|qa|extract)
+- custom_prompt (text)
+- language (varchar(10): th|en)
+- analysis (text) - Full analysis
+- summary (text) - Brief summary
+- key_points (text[], ARRAY)
+- entities (text[], ARRAY)
+- sentiment (varchar(50))
+- tokens_used (int)
+- process_time_ms (float)
+- created_at (timestamp)
+- updated_at (timestamp)
+- deleted_at (timestamp, NULLABLE) - Soft delete
+- reanalysis_count (int, DEFAULT 0)
+```
+
+### Relationships
+
+```
+Persona (1) ──────→ Message (Many)
+                    └─→ file_attachments (JSONB array)
+                        └─→ References FileAnalysis by file_id
+
+Message.session_id ←→ FileAnalysis.session_id (Linked by session)
+```
+
+---
+
+## ⚠️ Error Handling
+
+### Common Errors
+
+| Status | Error | Cause | Solution |
+|--------|-------|-------|----------|
+| 400 | "message is required" | Empty message | Provide message content |
+| 400 | "maximum 5 files allowed" | Too many files | Limit to 5 files |
+| 404 | "persona with ID X not found" | Invalid persona_id | Use valid ID (1, 2, or 3) |
+| 413 | File too large | Exceeds limit | Reduce file size |
+| 415 | Unsupported file type | Invalid format | Use supported formats |
+| 422 | Failed to parse file | Corrupted file | Check file integrity |
+| 503 | OpenAI API unavailable | API down | Retry after delay |
+
+### Error Response Format
+```json
+{
+  "error": "Descriptive error message"
+}
+```
+
+### Best Practices
+- Always check HTTP status code
+- Parse error messages for user display
+- Implement retry logic for 503 errors (exponential backoff)
+- Validate file size before upload
+- Validate session_id format on client
+
+---
+
+## 💡 Best Practices
 
 ### Conversation History
-- Use the same `session_id` for related conversations
-- Set `use_history: true` to maintain context
-- Consider limiting history to recent messages for cost efficiency
+✅ **DO**:
+- Use consistent `session_id` per conversation
+- Set `use_history: true` for context
+- Limit history to recent messages (backend limits to 10)
+
+❌ **DON'T**:
+- Change `session_id` mid-conversation
+- Include entire history manually in message
+
+### File Attachments
+✅ **DO**:
+- Upload files first via `/file/analyze`
+- Store returned `file_id`
+- Send `file_ids` array in chat request
+- Max 5 files per message
+
+❌ **DON'T**:
+- Send files directly in chat endpoint
+- Exceed file size limits
 
 ### System Prompts
-- **Use English for system prompts** for better AI compliance
-- Be specific and provide examples for complex behaviors
-- Example:
+✅ **DO**:
+- Use English for system prompts (better AI compliance)
+- Be specific and provide examples
+- Specify output language explicitly
+
+**Example**:
 ```json
 {
   "system_prompt": "You MUST respond in Thai language. You are a professional consultant. Always provide structured answers with: 1) Summary 2) Details 3) Recommendations. Example: 'สรุป: ..., รายละเอียด: ..., คำแนะนำ: ...'"
 }
 ```
 
-### File Analysis
-- Use `summary` for quick overview
-- Use `detail` for comprehensive analysis
-- Provide specific `prompt` for targeted extraction
-- Choose appropriate `language` for response
+❌ **DON'T**:
+- Use vague prompts
+- Assume AI knows output language
 
-### Error Handling
-- Always check HTTP status codes
-- Parse error messages for user-friendly display
-- Implement retry logic for 503 errors
-
----
-
-## Rate Limiting (Recommended for Production)
-
-| Endpoint | Recommended Limit |
-|----------|-------------------|
-| `POST /api/chat` | 20 requests/minute |
-| `POST /api/audio/transcribe` | 10 requests/minute |
-| `POST /api/file/analyze` | 20 requests/minute |
-| `GET /api/personas` | 60 requests/minute |
-| WebSocket connections | 5 connections/user |
+### Performance
+- Use WebSocket for long responses (streaming)
+- Use REST API for simple Q&A
+- Implement client-side caching for personas
+- Paginate history requests
 
 ---
 
-## Changelog
+## 📊 Database Schema Visual
 
-### Version 1.2.0 (2025-10-31) - **Current**
-- Added conversation history feature (`use_history`, `session_id`)
-- Added `history_count` to chat responses
-- Refactored controllers with utility helpers
-- Improved error handling and response consistency
-- Added debug capabilities for system prompt tracing
-- Updated documentation to be more concise
+```
+┌─────────────────┐
+│    Persona      │
+│  (id: 1,2,3)    │
+└────────┬────────┘
+         │
+         │ 1:N (optional FK)
+         ▼
+┌─────────────────────────────────┐
+│         Message                 │
+│  - id (uuid)                    │
+│  - session_id                   │
+│  - role (user/assistant)        │
+│  - content                      │
+│  - persona_id (FK, nullable)    │
+│  - file_attachments (jsonb) ────┐
+└─────────────────────────────────┘
+                                   │
+                                   │ References by file_id
+                                   ▼
+                         ┌─────────────────────┐
+                         │   FileAnalysis      │
+                         │  - id (uuid)        │
+                         │  - session_id       │
+                         │  - file_name        │
+                         │  - analysis         │
+                         │  - summary          │
+                         └─────────────────────┘
+```
 
-### Version 1.1.0 (2025-10-31)
-- Added file analysis endpoints (PDF, DOCX, images)
-- Implemented Vision API for image analysis
-- Added file history tracking
+---
+
+## 🔧 Environment Variables
+
+Required in `.env.development`:
+
+```env
+# Server
+PORT=3001
+APP_ENV=development
+APP_NAME=ChatBotAPI
+
+# Database
+DATABASE_URL=postgresql://user:password@localhost:5432/chatbot
+
+# OpenAI
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_MAX_TOKENS=2000
+OPENAI_TEMPERATURE=0.7
+
+# CORS
+CORS_ORIGIN=http://localhost:5173
+```
+
+---
+
+## 📝 Changelog
+
+### Version 2.0.0 (2025-11-01) - **Current**
+- ✅ Added file attachment support in chat (`file_ids`)
+- ✅ Backend automatically builds file context from UUIDs
+- ✅ Updated base URL to port 3001
+- ✅ Added JSONB `file_attachments` to Message model
+- ✅ Improved WebSocket with file support
+- ✅ Added session linking for files
+- ✅ Comprehensive backend analysis
+- ✅ Simplified and clarified documentation
+
+### Version 1.2.0 (2025-10-31)
+- Added conversation history (`use_history`, `session_id`)
+- Added file analysis endpoints
+- Implemented Vision API for images
 
 ### Version 1.0.0 (2025-10-28)
-- Initial API release
-- Chat, persona, and audio endpoints
-- WebSocket streaming support
+- Initial release
+- Chat, persona, audio endpoints
+- WebSocket streaming
 
 ---
 
-## Additional Resources
+## 🌐 Resources
 
-- **OpenAI API Docs**: https://platform.openai.com/docs
+- **OpenAI API**: https://platform.openai.com/docs
 - **WebSocket Guide**: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket
+- **PostgreSQL JSONB**: https://www.postgresql.org/docs/current/datatype-json.html
 
-**Base URL**: http://localhost:3000/api
-**Version**: 1.2.0
-**Last Updated**: 2025-10-31
+---
+
+**API Base URL**: `http://localhost:3001/api`
+**WebSocket URL**: `ws://localhost:3001/api/chat/stream`
+**Frontend**: `http://localhost:5173`

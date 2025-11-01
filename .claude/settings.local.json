@@ -34,7 +34,8 @@
       "Bash(staticcheck:*)",
       "Bash(ping:*)",
       "Bash(nul)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []
