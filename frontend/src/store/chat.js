@@ -151,6 +151,21 @@ export const useChatStore = defineStore('chat', {
       this.uploadedFiles = []
       // สร้าง session ใหม่เมื่อ clear chat
       this.createNewSession()
+    },
+
+    // Remove a specific uploaded file
+    removeUploadedFile(fileId) {
+      const index = this.uploadedFiles.findIndex(f => f.fileId === fileId)
+      if (index !== -1) {
+        this.uploadedFiles.splice(index, 1)
+        console.log('Removed file:', fileId)
+      }
+    },
+
+    // Clear all uploaded files
+    clearUploadedFiles() {
+      this.uploadedFiles = []
+      console.log('Cleared all uploaded files')
     }
   }
 })

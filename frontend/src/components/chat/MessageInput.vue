@@ -1,6 +1,13 @@
 <template>
   <div class="border-t bg-white p-4">
     <div class="max-w-4xl mx-auto">
+      <!-- Uploaded Files List -->
+      <FileList
+        v-if="chatStore.uploadedFiles.length > 0"
+        :show-delete="true"
+        :show-clear-button="true"
+      />
+
       <!-- File Upload Component -->
       <div class="mb-3">
         <FileUpload
@@ -81,6 +88,7 @@ import { ref, computed, inject, nextTick } from 'vue'
 import { useChatStore } from '@/store/chat'
 import { useAudioRecorder } from '@/composables/useAudioRecorder'
 import FileUpload from '@/components/file/FileUpload.vue'
+import FileList from '@/components/file/FileList.vue'
 
 const chatStore = useChatStore()
 const { isRecording, startRecording, stopRecording } = useAudioRecorder()

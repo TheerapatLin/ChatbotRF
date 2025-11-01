@@ -67,6 +67,9 @@ export function useWebSocket() {
       return false
     }
 
+    // Get file IDs from uploaded files in store
+    const fileIds = chatStore.uploadedFiles.map(f => f.fileId)
+
     // Build message according to Backend format
     let message
     if (typeof payload === 'string') {
@@ -75,7 +78,8 @@ export function useWebSocket() {
         content: payload,                             // ✅ เปลี่ยนจาก message → content
         session_id: chatStore.sessionId,
         persona_id: chatStore.currentPersonaId || 1,
-        system_prompt: chatStore.systemPrompt || ''
+        system_prompt: chatStore.systemPrompt || '',
+        file_ids: fileIds                             // ✅ เพิ่ม file_ids
       }
     } else {
       message = {
@@ -83,7 +87,8 @@ export function useWebSocket() {
         content: payload.content,                     // ✅ เปลี่ยนจาก message → content
         session_id: chatStore.sessionId,
         persona_id: payload.persona_id || chatStore.currentPersonaId || 1,
-        system_prompt: payload.system_prompt || chatStore.systemPrompt || ''
+        system_prompt: payload.system_prompt || chatStore.systemPrompt || '',
+        file_ids: payload.file_ids || fileIds         // ✅ เพิ่ม file_ids
       }
     }
 
