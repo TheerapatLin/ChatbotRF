@@ -7,7 +7,7 @@ export function useWebSocket() {
   const reconnectTimer = ref(null)
   const chatStore = useChatStore()
 
-  const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001/api/chat/stream'
+  const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/api/chat/stream'
 
   function connect() {
     try {
@@ -67,20 +67,23 @@ export function useWebSocket() {
       return false
     }
 
-    // Support both old format (string) and new format (object)
+    // Build message according to Backend format
     let message
     if (typeof payload === 'string') {
       message = {
-        type: 'message',
-        content: payload,
-        persona_id: 1
+        type: 'message',                              // ✅ เพิ่ม type
+        content: payload,                             // ✅ เปลี่ยนจาก message → content
+        session_id: chatStore.sessionId,
+        persona_id: chatStore.currentPersonaId || 1,
+        system_prompt: chatStore.systemPrompt || ''
       }
     } else {
       message = {
-        type: 'message',
-        content: payload.content,
-        persona_id: payload.persona_id || 1,
-        system_prompt: payload.system_prompt || ''
+        type: 'message',                              // ✅ เพิ่ม type
+        content: payload.content,                     // ✅ เปลี่ยนจาก message → content
+        session_id: chatStore.sessionId,
+        persona_id: payload.persona_id || chatStore.currentPersonaId || 1,
+        system_prompt: payload.system_prompt || chatStore.systemPrompt || ''
       }
     }
 

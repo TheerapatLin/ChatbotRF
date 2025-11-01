@@ -74,21 +74,13 @@ const handleNewChat = () => {
   }
 }
 
-const loadChatHistory = async () => {
-  try {
-    await chatStore.fetchHistory()
-    console.log('Chat history loaded:', chatStore.messages.length, 'messages')
-  } catch (error) {
-    console.error('Failed to load chat history:', error)
-  }
-}
-
 onMounted(async () => {
   console.log('ChatView mounted, mode:', chatMode.value)
 
-  // Load chat history from API only in text mode
-  if (chatMode.value === 'text') {
-    await loadChatHistory()
-  }
+  // Initialize chat session (สร้าง/โหลด session_id)
+  chatStore.initializeChat()
+
+  console.log('Chat session initialized:', chatStore.sessionId)
+  console.log('Chat history loaded:', chatStore.messages.length, 'messages')
 })
 </script>

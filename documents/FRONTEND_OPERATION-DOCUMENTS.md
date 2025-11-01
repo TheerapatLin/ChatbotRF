@@ -1,1318 +1,765 @@
-# Frontend Operation Documentation
+# Frontend Documentation - ChatBot Project
 
-## Table of Contents
-1. [Technology Stack](#technology-stack)
-2. [Project Structure](#project-structure)
-3. [Setup Instructions](#setup-instructions)
-4. [Core Components](#core-components)
-5. [State Management](#state-management)
-6. [API Integration](#api-integration)
-7. [WebSocket Integration](#websocket-integration)
-8. [Audio Recording](#audio-recording)
-9. [UI/UX Guidelines](#uiux-guidelines)
-10. [Testing Strategy](#testing-strategy)
-11. [Deployment](#deployment)
+**เวอร์ชั่น**: 1.0
+**อัพเดตล่าสุด**: 2025-11-01
+**สถานะ**: พร้อมพัฒนา (Backend สมบูรณ์แล้ว)
 
 ---
 
-## Technology Stack
+## สารบัญ
 
-| Category | Technology | Version | Purpose |
-|----------|-----------|---------|---------|
-| **Framework** | Vue.js | 3.4+ | Progressive JavaScript framework |
-| **Build Tool** | Vite | 5.0+ | Fast build tool and dev server |
-| **State Management** | Pinia | 2.1+ | Modern Vue store |
-| **Routing** | Vue Router | 4.0+ | Official router for Vue.js |
-| **HTTP Client** | Axios | 1.6+ | Promise-based HTTP client |
-| **CSS Framework** | Tailwind CSS | 3.4+ | Utility-first CSS framework |
-| **UI Components** | Headless UI | 2.0+ | Unstyled, accessible components |
-| **Icons** | Heroicons | 2.0+ | Beautiful hand-crafted SVG icons |
-| **WebSocket** | Native API | - | Real-time communication |
-| **Audio** | MediaRecorder API | - | Audio recording |
+1. [ภาพรวมและสถานะ](#ภาพรวมและสถานะ)
+2. [เทคโนโลยีที่ใช้](#เทคโนโลยีที่ใช้)
+3. [โครงสร้างโปรเจ็ค](#โครงสร้างโปรเจ็ค)
+4. [การติดตั้งและเริ่มต้น](#การติดตั้งและเริ่มต้น)
+5. [Features ที่ต้องพัฒนา](#features-ที่ต้องพัฒนา)
+6. [API Endpoints ที่พร้อมใช้](#api-endpoints-ที่พร้อมใช้)
+7. [คู่มือการพัฒนา](#คู่มือการพัฒนา)
 
 ---
 
-## Project Structure
+## ภาพรวมและสถานะ
+
+### Backend Status: ✅ สมบูรณ์ (95%)
+
+Backend พร้อมใช้งานแล้ว มี API endpoints ครบถ้วนสำหรับ:
+- ✅ Chat System (พร้อม WebSocket streaming)
+- ✅ Multi-Persona System (3 personas พร้อมใช้)
+- ✅ File Upload & Analysis (PDF, DOCX, XLSX, Images)
+- ✅ Audio (Speech-to-Text, Text-to-Speech)
+- ✅ Database (PostgreSQL พร้อม schema)
+
+### Frontend Status: ⏳ รอการพัฒนา
+
+Frontend มี **โครงสร้างพื้นฐาน** อยู่แล้ว แต่ต้องปรับให้สอดคล้องกับ Backend:
+- ⚠️ มี Vue 3 components พื้นฐาน
+- ⚠️ ต้องอัพเดต API integration
+- ⚠️ ต้องเพิ่ม File Upload UI
+- ⚠️ ต้องปรับ session management
+
+---
+
+## เทคโนโลยีที่ใช้
+
+| เทคโนโลยี | เวอร์ชั่น | หมายเหตุ |
+|-----------|----------|----------|
+| **Vue.js** | 3.4+ | Composition API |
+| **Vite** | 5.0+ | Build tool |
+| **Pinia** | 2.1+ | State management |
+| **Vue Router** | 4.0+ | Routing |
+| **Axios** | 1.6+ | HTTP client |
+| **Tailwind CSS** | 3.4+ | Styling |
+| **WebSocket** | Native API | Real-time streaming |
+
+---
+
+## โครงสร้างโปรเจ็ค
 
 ```
 frontend/
-├── public/
-│   └── favicon.ico
 ├── src/
-│   ├── assets/              # Static assets (images, fonts)
-│   ├── components/          # Vue components
+│   ├── components/
 │   │   ├── chat/
-│   │   │   ├── MessageBubble.vue
-│   │   │   ├── MessageList.vue
-│   │   │   ├── MessageInput.vue
-│   │   │   └── ChatContainer.vue
-│   │   ├── personas/
-│   │   │   ├── PersonaCard.vue
-│   │   │   ├── PersonaSelector.vue
-│   │   │   └── PersonaStats.vue
-│   │   ├── audio/
-│   │   │   ├── AudioRecorder.vue
-│   │   │   └── AudioPlayer.vue
+│   │   │   ├── MessageBubble.vue       ✅ มีอยู่แล้ว
+│   │   │   ├── MessageInput.vue        ⚠️ ต้องเพิ่ม File Upload
+│   │   │   └── MessageList.vue         ✅ มีอยู่แล้ว
+│   │   ├── file/                       ❌ ยังไม่มี - ต้องสร้าง
+│   │   │   ├── FileUpload.vue
+│   │   │   ├── FileList.vue
+│   │   │   └── FileAnalysisCard.vue
 │   │   └── layout/
-│   │       ├── AppHeader.vue
-│   │       ├── AppSidebar.vue
-│   │       └── AppLayout.vue
-│   ├── composables/         # Reusable composition functions
-│   │   ├── useWebSocket.js
-│   │   ├── useAudioRecorder.js
-│   │   └── useChat.js
-│   ├── router/              # Vue Router configuration
-│   │   └── index.js
-│   ├── services/            # API services
-│   │   ├── api.js
-│   │   ├── chatService.js
-│   │   ├── personaService.js
-│   │   └── audioService.js
-│   ├── store/               # Pinia stores
-│   │   ├── chat.js
-│   │   ├── personas.js
-│   │   └── ui.js
-│   ├── utils/               # Utility functions
-│   │   ├── formatters.js
-│   │   └── validators.js
-│   ├── views/               # Page components
-│   │   ├── HomeView.vue
-│   │   ├── ChatView.vue
-│   │   └── PersonasView.vue
-│   ├── App.vue              # Root component
-│   └── main.js              # Application entry point
-├── .env.development         # Development environment variables
-├── .env.production          # Production environment variables
-├── index.html
-├── package.json
-├── tailwind.config.js
-├── vite.config.js
-└── README.md
+│   │       └── AppLayout.vue           ✅ มีอยู่แล้ว
+│   ├── composables/
+│   │   ├── useWebSocket.js             ✅ มีอยู่แล้ว
+│   │   ├── useAudioRecorder.js         ✅ มีอยู่แล้ว
+│   │   └── useFileUpload.js            ❌ ยังไม่มี - ต้องสร้าง
+│   ├── services/
+│   │   ├── api.js                      ✅ มีอยู่แล้ว
+│   │   ├── chatService.js              ⚠️ ต้องเพิ่ม session_id, file_attachments
+│   │   ├── audioService.js             ✅ มีอยู่แล้ว
+│   │   └── fileService.js              ❌ ยังไม่มี - ต้องสร้าง
+│   ├── store/
+│   │   ├── chat.js                     ⚠️ ต้องเพิ่ม session management
+│   │   ├── personas.js                 ✅ มีอยู่แล้ว
+│   │   └── files.js                    ❌ ยังไม่มี - ต้องสร้าง
+│   └── views/
+│       ├── ChatView.vue                ⚠️ ต้องเพิ่ม File Upload UI
+│       └── SpeechView.vue              ✅ มีอยู่แล้ว
+├── .env.development                    ⚠️ ต้องตรวจสอบ API URL
+└── package.json
 ```
 
 ---
 
-## Setup Instructions
+## การติดตั้งและเริ่มต้น
 
-### 1. Initialize Vue 3 Project with Vite
+### 1. ติดตั้ง Dependencies
 
 ```bash
-# Navigate to project root
-cd ChatBotProject
-
-# Create Vue 3 project with Vite
-npm create vite@latest frontend -- --template vue
-
-# Navigate to frontend directory
 cd frontend
-
-# Install dependencies
 npm install
 ```
 
-### 2. Install Required Packages
+### 2. ตั้งค่า Environment Variables
+
+สร้างไฟล์ `.env.development`:
+
+```env
+VITE_API_BASE_URL=http://localhost:3000/api
+VITE_WS_URL=ws://localhost:3000/api/chat/stream
+```
+
+### 3. รัน Development Server
 
 ```bash
-# Core dependencies
-npm install vue-router@4 pinia axios
-
-# UI dependencies
-npm install -D tailwindcss@latest postcss autoprefixer
-npm install @headlessui/vue @heroicons/vue
-
-# Development dependencies
-npm install -D @vitejs/plugin-vue eslint prettier
+npm run dev
 ```
 
-### 3. Initialize Tailwind CSS
-
-```bash
-# Generate Tailwind config
-npx tailwindcss init -p
-```
-
-**tailwind.config.js:**
-```javascript
-/** @type {import('tailwindcss').Config} */
-export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{vue,js,ts,jsx,tsx}",
-  ],
-  theme: {
-    extend: {
-      colors: {
-        primary: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-        }
-      }
-    },
-  },
-  plugins: [],
-}
-```
-
-### 4. Environment Configuration
-
-**.env.development:**
-```env
-VITE_API_BASE_URL=http://localhost:3001/api
-VITE_WS_URL=ws://localhost:3001/api/chat/stream
-VITE_APP_TITLE=ChatBot AI
-```
-
-**.env.production:**
-```env
-VITE_API_BASE_URL=https://api.yourdomain.com/api
-VITE_WS_URL=wss://api.yourdomain.com/api/chat/stream
-VITE_APP_TITLE=ChatBot AI
-```
+Frontend จะรันที่ `http://localhost:5173`
 
 ---
 
-## Core Components
+## Features ที่ต้องพัฒนา
 
-### 1. MessageBubble Component
+### Priority 1: Chat System พร้อม File Upload ⚡
 
-**`src/components/chat/MessageBubble.vue`:**
+**ความสำคัญ**: สูงสุด
+**Backend Status**: ✅ พร้อมใช้
+
+**สิ่งที่ต้องทำ**:
+
+1. **อัพเดต MessageInput Component**
+   - เพิ่มปุ่ม Upload File
+   - รองรับ Multiple Files (สูงสุด 5 ไฟล์/ข้อความ)
+   - แสดง Preview ไฟล์ก่อนส่งในรูปแบบ card
+   - ตรวจสอบ File Type และ Size
+   - เพิ่มปุ่มลบ Preview ไฟล์ก่อนส่ง ให้อยู่มุมบนขวาของ card
+
+2. **สร้าง File Upload Service**
+
+   **ไฟล์**: `src/services/fileService.js`
+
+   ```javascript
+   import api from './api'
+
+   export const fileService = {
+     // Upload และวิเคราะห์ไฟล์
+     async analyzeFile(file, options = {}) {
+       const formData = new FormData()
+       formData.append('file', file)
+       formData.append('analysis_type', options.analysisType || 'summary')
+       formData.append('language', options.language || 'th')
+       formData.append('session_id', options.sessionId || '')
+
+       if (options.prompt) {
+         formData.append('prompt', options.prompt)
+       }
+
+       return await api.post('/file/analyze', formData, {
+         headers: { 'Content-Type': 'multipart/form-data' }
+       })
+     },
+
+     // ดึงประวัติไฟล์
+     async getFileHistory(sessionId, limit = 20) {
+       return await api.get('/file/history', {
+         params: { session_id: sessionId, limit }
+       })
+     }
+   }
+   ```
+
+3. **อัพเดต Chat Service เพิ่ม session_id และ use_history**
+
+   **ไฟล์**: `src/services/chatService.js` (เพิ่ม)
+
+   ```javascript
+   async sendMessage(message, sessionId, personaId = null, options = {}) {
+     const payload = {
+       message,
+       session_id: sessionId,      // ⚡ เพิ่ม session_id
+       persona_id: personaId,
+       use_history: true,          // ⚡ เปิด conversation history
+       temperature: options.temperature || 0.7,
+       max_tokens: options.maxTokens || 0,
+       model: options.model || 'gpt-4o-mini'
+     }
+
+     return await api.post('/chat', payload)
+   }
+   ```
+
+4. **อัพเดต Chat Store เพิ่ม Session Management**
+
+   **ไฟล์**: `src/store/chat.js` (เพิ่ม)
+
+   ```javascript
+   state: () => ({
+     messages: [],
+     sessionId: null,              // ⚡ เพิ่ม session tracking
+     uploadedFiles: [],            // ⚡ ไฟล์ที่อัปโหลดใน session ปัจจุบัน
+     isLoading: false,
+     isStreaming: false,
+     currentPersonaId: 1
+   }),
+
+   actions: {
+     // สร้าง session ใหม่
+     createNewSession() {
+       this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+       this.messages = []
+       this.uploadedFiles = []
+       return this.sessionId
+     },
+
+     // Upload ไฟล์
+     async uploadFiles(files, analysisType = 'summary') {
+       for (const file of files) {
+         const result = await fileService.analyzeFile(file, {
+           sessionId: this.sessionId,
+           analysisType,
+           language: 'th'
+         })
+         this.uploadedFiles.push({
+           fileId: result.file_id,
+           filename: result.filename,
+           summary: result.summary
+         })
+       }
+     }
+   }
+   ```
+
+---
+
+### Priority 2: File Upload UI Components 📁
+
+**Backend Endpoints พร้อมใช้**:
+- `POST /api/file/analyze` - อัปโหลดและวิเคราะห์ไฟล์
+- `GET /api/file/history` - ดูประวัติไฟล์
+
+**Components ที่ต้องสร้าง**:
+
+#### 1. FileUpload.vue
 ```vue
 <template>
-  <div
-    :class="[
-      'flex mb-4',
-      message.role === 'user' ? 'justify-end' : 'justify-start'
-    ]"
-  >
-    <div
-      :class="[
-        'max-w-[70%] rounded-2xl px-4 py-3 shadow-sm',
-        message.role === 'user'
-          ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
-          : 'bg-white text-gray-800 border border-gray-200'
-      ]"
-    >
-      <div class="flex items-start gap-2">
-        <div v-if="message.role === 'assistant'" class="text-2xl">
-          {{ personaIcon }}
-        </div>
-        <div class="flex-1">
-          <div class="text-sm font-medium mb-1" v-if="message.role === 'assistant'">
-            {{ personaName }}
-          </div>
-          <div class="whitespace-pre-wrap break-words">
-            {{ message.content }}
-          </div>
-          <div
-            :class="[
-              'text-xs mt-2',
-              message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
-            ]"
-          >
-            {{ formatTime(message.created_at) }}
-          </div>
-          <div
-            v-if="message.tokens_used"
-            class="text-xs mt-1 opacity-70"
-          >
-            {{ message.tokens_used }} tokens
-          </div>
-        </div>
+  <div class="file-upload">
+    <input
+      ref="fileInput"
+      type="file"
+      multiple
+      accept=".pdf,.docx,.xlsx,.txt,.png,.jpg,.jpeg"
+      @change="handleFileSelect"
+      class="hidden"
+    />
+
+    <button @click="$refs.fileInput.click()" class="upload-btn">
+      📎 แนบไฟล์ (สูงสุด 5 ไฟล์)
+    </button>
+
+    <!-- Preview ไฟล์ที่เลือก -->
+    <div v-if="selectedFiles.length > 0" class="file-preview">
+      <div v-for="file in selectedFiles" :key="file.name" class="file-item">
+        {{ file.name }} ({{ formatFileSize(file.size) }})
+        <button @click="removeFile(file)">✕</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { usePersonasStore } from '@/store/personas'
+import { ref } from 'vue'
 
-const props = defineProps({
-  message: {
-    type: Object,
-    required: true
+const selectedFiles = ref([])
+const emit = defineEmits(['files-selected'])
+
+const handleFileSelect = (event) => {
+  const files = Array.from(event.target.files)
+
+  // จำกัด 5 ไฟล์
+  if (selectedFiles.value.length + files.length > 5) {
+    alert('สามารถเลือกได้สูงสุด 5 ไฟล์')
+    return
   }
-})
 
-const personasStore = usePersonasStore()
+  selectedFiles.value.push(...files)
+  emit('files-selected', selectedFiles.value)
+}
 
-const personaIcon = computed(() => {
-  if (props.message.persona_id) {
-    const persona = personasStore.getPersonaById(props.message.persona_id)
-    return persona?.icon || '🤖'
-  }
-  return '🤖'
-})
+const removeFile = (file) => {
+  selectedFiles.value = selectedFiles.value.filter(f => f !== file)
+  emit('files-selected', selectedFiles.value)
+}
 
-const personaName = computed(() => {
-  if (props.message.persona_id) {
-    const persona = personasStore.getPersonaById(props.message.persona_id)
-    return persona?.name || 'AI Assistant'
-  }
-  return 'AI Assistant'
-})
-
-const formatTime = (timestamp) => {
-  return new Date(timestamp).toLocaleTimeString('th-TH', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+const formatFileSize = (bytes) => {
+  return (bytes / 1024 / 1024).toFixed(2) + ' MB'
 }
 </script>
 ```
 
-### 2. MessageList Component
+#### 2. ปรับ MessageInput.vue เพิ่ม File Upload
 
-**`src/components/chat/MessageList.vue`:**
 ```vue
 <template>
-  <div
-    ref="messagesContainer"
-    class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"
-  >
-    <div v-if="isLoading" class="flex justify-center py-8">
-      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-    </div>
+  <div class="message-input">
+    <!-- File Upload Component -->
+    <FileUpload @files-selected="handleFilesSelected" />
 
-    <MessageBubble
-      v-for="message in messages"
-      :key="message.id"
-      :message="message"
+    <textarea
+      v-model="message"
+      @keydown.enter.prevent="sendMessage"
+      placeholder="พิมพ์ข้อความ..."
     />
 
-    <div v-if="isStreaming" class="flex justify-start">
-      <div class="max-w-[70%] rounded-2xl px-4 py-3 bg-white border border-gray-200">
-        <div class="flex items-center gap-2">
-          <div class="text-2xl">{{ currentPersonaIcon }}</div>
-          <div class="flex-1">
-            <div class="text-sm font-medium mb-1">{{ currentPersonaName }}</div>
-            <div class="whitespace-pre-wrap break-words">
-              {{ streamingContent }}
-              <span class="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1"></span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-
-<script setup>
-import { ref, watch, nextTick, computed } from 'vue'
-import { useChatStore } from '@/store/chat'
-import { usePersonasStore } from '@/store/personas'
-import MessageBubble from './MessageBubble.vue'
-
-const chatStore = useChatStore()
-const personasStore = usePersonasStore()
-const messagesContainer = ref(null)
-
-const messages = computed(() => chatStore.messages)
-const isLoading = computed(() => chatStore.isLoading)
-const isStreaming = computed(() => chatStore.isStreaming)
-const streamingContent = computed(() => chatStore.streamingContent)
-
-const currentPersonaIcon = computed(() => {
-  const persona = personasStore.getCurrentPersona()
-  return persona?.icon || '🤖'
-})
-
-const currentPersonaName = computed(() => {
-  const persona = personasStore.getCurrentPersona()
-  return persona?.name || 'AI Assistant'
-})
-
-// Auto-scroll to bottom when new messages arrive
-watch([messages, streamingContent], () => {
-  nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
-  })
-})
-</script>
-```
-
-### 3. MessageInput Component
-
-**`src/components/chat/MessageInput.vue`:**
-```vue
-<template>
-  <div class="border-t bg-white p-4">
-    <div class="flex items-end gap-3">
-      <button
-        @click="toggleRecording"
-        :class="[
-          'p-3 rounded-full transition-all',
-          isRecording
-            ? 'bg-red-500 hover:bg-red-600 animate-pulse'
-            : 'bg-gray-200 hover:bg-gray-300'
-        ]"
-        :disabled="isStreaming"
-      >
-        <MicrophoneIcon class="w-5 h-5" :class="isRecording ? 'text-white' : 'text-gray-600'" />
-      </button>
-
-      <div class="flex-1">
-        <textarea
-          v-model="message"
-          @keydown.enter.exact.prevent="sendMessage"
-          placeholder="พิมพ์ข้อความ... (Enter เพื่อส่ง, Shift+Enter เพื่อขึ้นบรรทัดใหม่)"
-          class="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-blue-500 resize-none"
-          rows="1"
-          :disabled="isStreaming"
-        />
-      </div>
-
-      <button
-        @click="sendMessage"
-        :disabled="!message.trim() || isStreaming"
-        class="p-3 rounded-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all"
-      >
-        <PaperAirplaneIcon class="w-5 h-5 text-white" />
-      </button>
-    </div>
-
-    <div v-if="isRecording" class="mt-2 text-sm text-red-500 flex items-center gap-2">
-      <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-      กำลังบันทึกเสียง...
-    </div>
+    <button
+      @click="sendMessage"
+      :disabled="!canSend"
+    >
+      ส่ง
+    </button>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
-import { MicrophoneIcon, PaperAirplaneIcon } from '@heroicons/vue/24/solid'
 import { useChatStore } from '@/store/chat'
-import { useAudioRecorder } from '@/composables/useAudioRecorder'
+import FileUpload from '@/components/file/FileUpload.vue'
 
 const chatStore = useChatStore()
-const { isRecording, startRecording, stopRecording } = useAudioRecorder()
-
 const message = ref('')
-const isStreaming = computed(() => chatStore.isStreaming)
+const selectedFiles = ref([])
 
-const sendMessage = async () => {
-  if (!message.value.trim() || isStreaming.value) return
+const canSend = computed(() => {
+  return message.value.trim() || selectedFiles.value.length > 0
+})
 
-  await chatStore.sendMessage(message.value)
-  message.value = ''
+const handleFilesSelected = (files) => {
+  selectedFiles.value = files
 }
 
-const toggleRecording = async () => {
-  if (isRecording.value) {
-    const audioBlob = await stopRecording()
-    if (audioBlob) {
-      await chatStore.transcribeAndSend(audioBlob)
-    }
-  } else {
-    await startRecording()
+const sendMessage = async () => {
+  if (!canSend.value) return
+
+  // อัปโหลดไฟล์ก่อน (ถ้ามี)
+  if (selectedFiles.value.length > 0) {
+    await chatStore.uploadFiles(selectedFiles.value, 'summary')
   }
+
+  // ส่งข้อความ
+  await chatStore.sendMessage(message.value)
+
+  // รีเซ็ต
+  message.value = ''
+  selectedFiles.value = []
 }
 </script>
 ```
 
 ---
 
-## State Management
+### Priority 3: WebSocket Streaming ⚡
 
-### Pinia Store - Chat
+**Backend**: ✅ WebSocket endpoint พร้อมใช้ที่ `ws://localhost:3000/api/chat/stream`
 
-**`src/store/chat.js`:**
+**สิ่งที่ต้องทำ**:
+
+1. **ปรับ useWebSocket.js ให้รองรับ session_id และ file context**
+
 ```javascript
-import { defineStore } from 'pinia'
-import { chatService } from '@/services/chatService'
-import { useWebSocket } from '@/composables/useWebSocket'
-
-export const useChatStore = defineStore('chat', {
-  state: () => ({
-    messages: [],
-    isLoading: false,
-    isStreaming: false,
-    streamingContent: '',
-    currentPersonaId: 1,
-    pagination: {
-      total: 0,
-      limit: 50,
-      offset: 0
-    }
-  }),
-
-  getters: {
-    userMessages: (state) => state.messages.filter(m => m.role === 'user'),
-    assistantMessages: (state) => state.messages.filter(m => m.role === 'assistant'),
-    totalTokensUsed: (state) => {
-      return state.messages
-        .filter(m => m.tokens_used)
-        .reduce((sum, m) => sum + m.tokens_used, 0)
-    }
-  },
-
-  actions: {
-    // Fetch chat history
-    async fetchHistory(limit = 50, offset = 0) {
-      this.isLoading = true
-      try {
-        const response = await chatService.getChatHistory(limit, offset)
-        this.messages = response.messages.reverse() // Newest at bottom
-        this.pagination = {
-          total: response.total,
-          limit: response.limit,
-          offset: response.offset
-        }
-      } catch (error) {
-        console.error('Failed to fetch chat history:', error)
-        throw error
-      } finally {
-        this.isLoading = false
-      }
-    },
-
-    // Send message (non-streaming)
-    async sendMessage(message) {
-      const userMessage = {
-        role: 'user',
-        content: message,
-        created_at: new Date().toISOString()
-      }
-      this.addMessage(userMessage)
-
-      try {
-        const response = await chatService.sendMessage(message, this.currentPersonaId)
-
-        const assistantMessage = {
-          id: response.message_id,
-          role: 'assistant',
-          content: response.reply,
-          persona_id: this.currentPersonaId,
-          tokens_used: response.tokens_used,
-          created_at: response.timestamp
-        }
-        this.addMessage(assistantMessage)
-
-        return response
-      } catch (error) {
-        console.error('Failed to send message:', error)
-        throw error
-      }
-    },
-
-    // Send streaming message via WebSocket
-    sendStreamingMessage(message) {
-      const { sendMessage } = useWebSocket()
-
-      const userMessage = {
-        role: 'user',
-        content: message,
-        created_at: new Date().toISOString()
-      }
-      this.addMessage(userMessage)
-
-      this.isStreaming = true
-      this.streamingContent = ''
-
-      sendMessage(message, this.currentPersonaId)
-    },
-
-    // Update streaming content
-    updateStreamingContent(chunk) {
-      this.streamingContent += chunk
-    },
-
-    // Finish streaming
-    finishStreaming(data) {
-      const assistantMessage = {
-        id: data.messageId,
-        role: 'assistant',
-        content: this.streamingContent,
-        persona_id: this.currentPersonaId,
-        tokens_used: data.tokensUsed,
-        created_at: new Date().toISOString()
-      }
-
-      this.addMessage(assistantMessage)
-      this.isStreaming = false
-      this.streamingContent = ''
-    },
-
-    // Add message to list
-    addMessage(message) {
-      this.messages.push(message)
-    },
-
-    // Set current persona
-    setCurrentPersona(personaId) {
-      this.currentPersonaId = personaId
-    },
-
-    // Transcribe audio and send
-    async transcribeAndSend(audioBlob) {
-      try {
-        const text = await chatService.transcribeAudio(audioBlob)
-        await this.sendStreamingMessage(text)
-      } catch (error) {
-        console.error('Failed to transcribe audio:', error)
-        throw error
-      }
-    },
-
-    // Clear chat
-    clearChat() {
-      this.messages = []
-      this.streamingContent = ''
-    }
+function sendMessage(content, sessionId, personaId = 1) {
+  if (!ws.value || ws.value.readyState !== WebSocket.OPEN) {
+    console.error('WebSocket is not connected')
+    return false
   }
-})
-```
 
-### Pinia Store - Personas
-
-**`src/store/personas.js`:**
-```javascript
-import { defineStore } from 'pinia'
-import { personaService } from '@/services/personaService'
-
-export const usePersonasStore = defineStore('personas', {
-  state: () => ({
-    personas: [],
-    currentPersonaId: 1,
-    isLoading: false
-  }),
-
-  getters: {
-    getCurrentPersona: (state) => {
-      return state.personas.find(p => p.id === state.currentPersonaId)
-    },
-
-    getPersonaById: (state) => (id) => {
-      return state.personas.find(p => p.id === id)
-    }
-  },
-
-  actions: {
-    async fetchPersonas() {
-      this.isLoading = true
-      try {
-        const response = await personaService.getAllPersonas()
-        this.personas = response.personas
-      } catch (error) {
-        console.error('Failed to fetch personas:', error)
-        throw error
-      } finally {
-        this.isLoading = false
-      }
-    },
-
-    async fetchPersonaById(id) {
-      try {
-        const persona = await personaService.getPersonaById(id)
-
-        // Update in personas array
-        const index = this.personas.findIndex(p => p.id === id)
-        if (index !== -1) {
-          this.personas[index] = persona
-        } else {
-          this.personas.push(persona)
-        }
-
-        return persona
-      } catch (error) {
-        console.error(`Failed to fetch persona ${id}:`, error)
-        throw error
-      }
-    },
-
-    setCurrentPersona(id) {
-      this.currentPersonaId = id
-    }
+  const message = {
+    message: content,
+    session_id: sessionId,     // ⚡ ส่ง session_id
+    persona_id: personaId,
+    use_history: true          // ⚡ เปิด history
   }
-})
-```
 
----
-
-## API Integration
-
-### Axios Configuration
-
-**`src/services/api.js`:**
-```javascript
-import axios from 'axios'
-
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api',
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json'
-  }
-})
-
-// Request interceptor
-api.interceptors.request.use(
-  (config) => {
-    // Add auth token if available
-    const token = localStorage.getItem('auth_token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
-  }
-)
-
-// Response interceptor
-api.interceptors.response.use(
-  (response) => response.data,
-  (error) => {
-    // Handle errors globally
-    if (error.response) {
-      switch (error.response.status) {
-        case 401:
-          console.error('Unauthorized - please login')
-          // Redirect to login page
-          break
-        case 404:
-          console.error('Resource not found')
-          break
-        case 500:
-          console.error('Server error')
-          break
-        default:
-          console.error('API error:', error.response.data)
-      }
-    } else if (error.request) {
-      console.error('Network error - no response received')
-    } else {
-      console.error('Request error:', error.message)
-    }
-    return Promise.reject(error)
-  }
-)
-
-export default api
-```
-
-### Chat Service
-
-**`src/services/chatService.js`:**
-```javascript
-import api from './api'
-
-export const chatService = {
-  // Send message (non-streaming)
-  async sendMessage(message, personaId = null, options = {}) {
-    const payload = {
-      message,
-      persona_id: personaId,
-      system_prompt: options.systemPrompt || '',
-      temperature: options.temperature || 0,
-      max_tokens: options.maxTokens || 0,
-      model: options.model || ''
-    }
-
-    return await api.post('/chat', payload)
-  },
-
-  // Get chat history
-  async getChatHistory(limit = 50, offset = 0) {
-    return await api.get('/chat/history', {
-      params: { limit, offset }
-    })
-  },
-
-  // Transcribe audio
-  async transcribeAudio(audioBlob) {
-    const formData = new FormData()
-    formData.append('audio', audioBlob, 'recording.webm')
-
-    return await api.post('/audio/transcribe', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
-  }
+  ws.value.send(JSON.stringify(message))
+  return true
 }
 ```
 
-### Persona Service
+2. **ปรับ Chat Store ให้ใช้ WebSocket แทน HTTP**
 
-**`src/services/personaService.js`:**
 ```javascript
-import api from './api'
+async sendMessage(message) {
+  // ใช้ WebSocket streaming แทน HTTP
+  this.sendStreamingMessage(message)
+}
 
-export const personaService = {
-  // Get all personas
-  async getAllPersonas() {
-    return await api.get('/personas')
-  },
+sendStreamingMessage(message) {
+  const { sendMessage } = useWebSocket()
 
-  // Get persona by ID
-  async getPersonaById(id) {
-    return await api.get(`/personas/${id}`)
+  const userMessage = {
+    role: 'user',
+    content: message,
+    created_at: new Date().toISOString()
   }
+  this.addMessage(userMessage)
+
+  this.isStreaming = true
+  this.streamingContent = ''
+
+  // ส่งผ่าน WebSocket พร้อม session_id
+  sendMessage(message, this.sessionId, this.currentPersonaId)
 }
 ```
 
 ---
 
-## WebSocket Integration
+### Priority 4: Session Management & History 📝
 
-### WebSocket Composable
+**Backend**: ✅ รองรับ `session_id` และ `use_history`
 
-**`src/composables/useWebSocket.js`:**
+**สิ่งที่ต้องทำ**:
+
+1. **สร้าง Session ใหม่เมื่อเริ่มต้น**
+
 ```javascript
-import { ref, onUnmounted } from 'vue'
+// src/store/chat.js
+actions: {
+  initializeChat() {
+    // สร้าง session ใหม่
+    if (!this.sessionId) {
+      this.createNewSession()
+    }
+
+    // โหลดประวัติ (ถ้ามี)
+    this.fetchHistory()
+  },
+
+  createNewSession() {
+    this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    this.messages = []
+    this.uploadedFiles = []
+    localStorage.setItem('current_session_id', this.sessionId)
+  },
+
+  async fetchHistory() {
+    const response = await chatService.getChatHistory(this.sessionId, 50)
+    this.messages = response.messages
+  }
+}
+```
+
+2. **ปรับ ChatView.vue เพื่อ initialize session**
+
+```javascript
+// src/views/ChatView.vue
+import { onMounted } from 'vue'
 import { useChatStore } from '@/store/chat'
 
-export function useWebSocket() {
-  const ws = ref(null)
-  const isConnected = ref(false)
-  const reconnectTimer = ref(null)
-  const chatStore = useChatStore()
+const chatStore = useChatStore()
 
-  const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001/api/chat/stream'
-
-  function connect() {
-    try {
-      ws.value = new WebSocket(wsUrl)
-
-      ws.value.onopen = () => {
-        console.log('WebSocket connected')
-        isConnected.value = true
-
-        // Clear reconnect timer if exists
-        if (reconnectTimer.value) {
-          clearTimeout(reconnectTimer.value)
-          reconnectTimer.value = null
-        }
-      }
-
-      ws.value.onmessage = (event) => {
-        const message = JSON.parse(event.data)
-        console.log('WebSocket message received:', message)
-
-        if (message.type === 'chunk') {
-          if (message.done) {
-            // Streaming complete
-            chatStore.finishStreaming({
-              messageId: message.message_id,
-              tokensUsed: message.tokens_used
-            })
-          } else {
-            // Streaming chunk
-            chatStore.updateStreamingContent(message.content)
-          }
-        } else if (message.type === 'error') {
-          console.error('WebSocket error message:', message.error)
-          chatStore.isStreaming = false
-        }
-      }
-
-      ws.value.onerror = (error) => {
-        console.error('WebSocket error:', error)
-        isConnected.value = false
-      }
-
-      ws.value.onclose = () => {
-        console.log('WebSocket disconnected')
-        isConnected.value = false
-        chatStore.isStreaming = false
-
-        // Auto-reconnect after 3 seconds
-        reconnectTimer.value = setTimeout(() => {
-          console.log('Attempting to reconnect...')
-          connect()
-        }, 3000)
-      }
-    } catch (error) {
-      console.error('Failed to create WebSocket connection:', error)
-    }
-  }
-
-  function sendMessage(content, personaId = 1) {
-    if (!ws.value || ws.value.readyState !== WebSocket.OPEN) {
-      console.error('WebSocket is not connected')
-      return false
-    }
-
-    const message = {
-      type: 'message',
-      content,
-      persona_id: personaId
-    }
-
-    ws.value.send(JSON.stringify(message))
-    return true
-  }
-
-  function disconnect() {
-    if (reconnectTimer.value) {
-      clearTimeout(reconnectTimer.value)
-      reconnectTimer.value = null
-    }
-
-    if (ws.value) {
-      ws.value.close()
-      ws.value = null
-    }
-
-    isConnected.value = false
-  }
-
-  // Auto-connect on composable initialization
-  connect()
-
-  // Auto-disconnect on component unmount
-  onUnmounted(() => {
-    disconnect()
-  })
-
-  return {
-    isConnected,
-    sendMessage,
-    disconnect,
-    reconnect: connect
-  }
-}
-```
-
----
-
-## Audio Recording
-
-### Audio Recorder Composable
-
-**`src/composables/useAudioRecorder.js`:**
-```javascript
-import { ref } from 'vue'
-
-export function useAudioRecorder() {
-  const isRecording = ref(false)
-  const mediaRecorder = ref(null)
-  const audioChunks = ref([])
-  const stream = ref(null)
-
-  async function startRecording() {
-    try {
-      // Request microphone access
-      stream.value = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100
-        }
-      })
-
-      // Create MediaRecorder
-      mediaRecorder.value = new MediaRecorder(stream.value, {
-        mimeType: 'audio/webm'
-      })
-
-      audioChunks.value = []
-
-      mediaRecorder.value.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunks.value.push(event.data)
-        }
-      }
-
-      mediaRecorder.value.start()
-      isRecording.value = true
-
-      console.log('Recording started')
-    } catch (error) {
-      console.error('Failed to start recording:', error)
-      throw error
-    }
-  }
-
-  async function stopRecording() {
-    return new Promise((resolve, reject) => {
-      if (!mediaRecorder.value || !isRecording.value) {
-        reject(new Error('No active recording'))
-        return
-      }
-
-      mediaRecorder.value.onstop = () => {
-        const audioBlob = new Blob(audioChunks.value, { type: 'audio/webm' })
-
-        // Stop all tracks
-        if (stream.value) {
-          stream.value.getTracks().forEach(track => track.stop())
-        }
-
-        isRecording.value = false
-        console.log('Recording stopped', audioBlob.size, 'bytes')
-
-        resolve(audioBlob)
-      }
-
-      mediaRecorder.value.onerror = (error) => {
-        reject(error)
-      }
-
-      mediaRecorder.value.stop()
-    })
-  }
-
-  function cancelRecording() {
-    if (mediaRecorder.value && isRecording.value) {
-      mediaRecorder.value.stop()
-
-      // Stop all tracks
-      if (stream.value) {
-        stream.value.getTracks().forEach(track => track.stop())
-      }
-
-      audioChunks.value = []
-      isRecording.value = false
-
-      console.log('Recording cancelled')
-    }
-  }
-
-  return {
-    isRecording,
-    startRecording,
-    stopRecording,
-    cancelRecording
-  }
-}
-```
-
----
-
-## UI/UX Guidelines
-
-### Design Principles
-
-1. **Conversational Interface**: Chat-like interface similar to popular messaging apps
-2. **Real-time Feedback**: Show typing indicators, streaming text, and loading states
-3. **Responsive Design**: Mobile-first approach, works on all screen sizes
-4. **Accessibility**: Keyboard navigation, screen reader support, ARIA labels
-5. **Performance**: Lazy loading, virtual scrolling for long chat histories
-
-### Color Scheme
-
-```css
-/* Primary Colors */
---primary-50: #f0f9ff;
---primary-100: #e0f2fe;
---primary-500: #0ea5e9;
---primary-600: #0284c7;
---primary-700: #0369a1;
-
-/* Gray Scale */
---gray-50: #f9fafb;
---gray-100: #f3f4f6;
---gray-500: #6b7280;
---gray-800: #1f2937;
-
-/* Semantic Colors */
---success: #10b981;
---error: #ef4444;
---warning: #f59e0b;
-```
-
-### Component Guidelines
-
-**Message Bubbles:**
-- User messages: Right-aligned, blue gradient background
-- AI messages: Left-aligned, white background with border
-- Max width: 70% of container
-- Border radius: 18px for rounded appearance
-- Include timestamp and persona info
-
-**Input Area:**
-- Fixed at bottom of screen
-- Auto-resize textarea (max 5 lines)
-- Send button disabled when empty or streaming
-- Show recording indicator when active
-
-**Persona Selector:**
-- Display as cards with icon, name, and description
-- Highlight currently selected persona
-- Show message count and token usage stats
-
----
-
-## Testing Strategy
-
-### Unit Tests (Vitest)
-
-```bash
-npm install -D vitest @vue/test-utils happy-dom
-```
-
-**Example test for MessageBubble:**
-```javascript
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
-import MessageBubble from '@/components/chat/MessageBubble.vue'
-
-describe('MessageBubble', () => {
-  it('renders user message correctly', () => {
-    const message = {
-      role: 'user',
-      content: 'Hello!',
-      created_at: new Date().toISOString()
-    }
-
-    const wrapper = mount(MessageBubble, {
-      props: { message }
-    })
-
-    expect(wrapper.text()).toContain('Hello!')
-    expect(wrapper.classes()).toContain('justify-end')
-  })
-
-  it('renders assistant message with persona', () => {
-    const message = {
-      role: 'assistant',
-      content: 'Hi there!',
-      persona_id: 1,
-      created_at: new Date().toISOString()
-    }
-
-    const wrapper = mount(MessageBubble, {
-      props: { message }
-    })
-
-    expect(wrapper.text()).toContain('Hi there!')
-    expect(wrapper.classes()).toContain('justify-start')
-  })
-})
-```
-
-### E2E Tests (Playwright)
-
-```bash
-npm install -D @playwright/test
-```
-
-**Example E2E test:**
-```javascript
-import { test, expect } from '@playwright/test'
-
-test('send message and receive response', async ({ page }) => {
-  await page.goto('http://localhost:5173')
-
-  // Wait for connection
-  await expect(page.locator('.status.connected')).toBeVisible()
-
-  // Type message
-  await page.fill('textarea', 'Hello AI!')
-
-  // Send message
-  await page.click('button[type="submit"]')
-
-  // Wait for response
-  await expect(page.locator('.assistant-message')).toBeVisible({ timeout: 10000 })
+onMounted(() => {
+  chatStore.initializeChat()
 })
 ```
 
 ---
 
-## Deployment
+## API Endpoints ที่พร้อมใช้
 
-### Build for Production
+### 1. Chat Endpoints ✅
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/chat` | ส่งข้อความ (รองรับ `session_id`, `use_history`) |
+| GET | `/api/chat/history` | ดึงประวัติการสนทนา (ใช้ `session_id`) |
+| WS | `/api/chat/stream` | WebSocket streaming |
+
+**ตัวอย่างการใช้งาน**:
+
+```javascript
+// ส่งข้อความพร้อม session และ history
+await chatService.sendMessage('สวัสดี', 'session_123', 1, {
+  use_history: true
+})
+
+// ดึงประวัติ
+const history = await chatService.getChatHistory('session_123', 50)
+```
+
+### 2. File Endpoints ✅
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/file/analyze` | อัปโหลดและวิเคราะห์ไฟล์ (รองรับ `session_id`) |
+| GET | `/api/file/history` | ดึงประวัติไฟล์ (filter ด้วย `session_id`) |
+
+**รองรับไฟล์**:
+- เอกสาร: PDF, DOCX, XLSX, TXT (max 10MB)
+- รูปภาพ: PNG, JPG, JPEG (max 20MB)
+
+**Analysis Types**:
+- `summary` - สรุปเนื้อหา
+- `detail` - วิเคราะห์ละเอียด
+- `qa` - ถาม-ตอบจากไฟล์
+- `extract` - ดึงข้อมูลสำคัญ
+
+### 3. Persona Endpoints ✅
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/personas` | รายชื่อ personas ทั้งหมด (3 personas) |
+| GET | `/api/personas/:id` | รายละเอียด persona |
+
+**Personas พร้อมใช้**:
+1. General Assistant (ID: 1)
+2. Technology Expert (ID: 2)
+3. Business Advisor (ID: 3)
+
+### 4. Audio Endpoints ✅
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/audio/transcribe` | แปลงเสียงเป็นข้อความ |
+| POST | `/api/audio/tts` | แปลงข้อความเป็นเสียง |
+
+---
+
+## คู่มือการพัฒนา
+
+### ขั้นตอนการพัฒนาแบบละเอียด
+
+#### Week 1: File Upload & Session Management
+
+**Day 1-2**: สร้าง File Upload Components
+- [ ] สร้าง `FileUpload.vue`
+- [ ] สร้าง `FileList.vue` (แสดงไฟล์ที่อัปโหลดแล้ว)
+- [ ] สร้าง `fileService.js`
+- [ ] ทดสอบ upload ไฟล์ผ่าน API
+
+**Day 3-4**: Session Management
+- [ ] เพิ่ม session tracking ใน Chat Store
+- [ ] สร้าง `createNewSession()` action
+- [ ] เพิ่ม `session_id` ใน chat requests
+- [ ] ทดสอบ conversation history
+
+**Day 5**: Integration
+- [ ] เชื่อม File Upload กับ MessageInput
+- [ ] ทดสอบส่งข้อความพร้อมไฟล์
+- [ ] ทดสอบ AI ตอบคำถามจากไฟล์
+
+#### Week 2: WebSocket & Real-time Features
+
+**Day 1-2**: WebSocket Integration
+- [ ] ปรับ `useWebSocket.js` รองรับ session
+- [ ] เพิ่ม file context ใน WebSocket request
+- [ ] ทดสอบ streaming responses
+
+**Day 3**: UI Polish
+- [ ] เพิ่ม loading states
+- [ ] แสดงไฟล์ที่แนบใน message bubbles
+- [ ] เพิ่ม error handling
+
+**Day 4-5**: Testing & Bug Fixes
+- [ ] ทดสอบ flow ทั้งหมด
+- [ ] แก้ไข bugs
+- [ ] Optimize performance
+
+---
+
+## ตัวอย่าง Flow การใช้งาน
+
+### Flow 1: Chat ปกติ (พร้อม History)
+
+```
+1. User เปิดแอพ
+   → Frontend สร้าง session_id ใหม่
+
+2. User พิมพ์ข้อความ "สวัสดี"
+   → ส่ง POST /api/chat {
+       message: "สวัสดี",
+       session_id: "session_123",
+       use_history: true
+     }
+
+3. AI ตอบ "สวัสดีครับ"
+   → บันทึกใน messages table พร้อม session_id
+
+4. User พิมพ์ "ชื่ออะไร"
+   → Backend โหลด history จาก session_123
+   → AI จำบริบทได้
+```
+
+### Flow 2: Chat พร้อม File Upload
+
+```
+1. User อัปโหลดไฟล์ PDF
+   → POST /api/file/analyze {
+       file: report.pdf,
+       session_id: "session_123",
+       analysis_type: "summary"
+     }
+   → Backend วิเคราะห์และบันทึกใน file_analyses table
+
+2. User ถามคำถาม "สรุปเอกสารนี้หน่อย"
+   → POST /api/chat {
+       message: "สรุปเอกสารนี้หน่อย",
+       session_id: "session_123",
+       use_history: true
+     }
+   → Backend โหลดไฟล์จาก session_123 (สูงสุด 5 ไฟล์)
+   → AI ตอบโดยอ้างอิงไฟล์
+```
+
+### Flow 3: WebSocket Streaming
+
+```
+1. User ส่งข้อความ
+   → WebSocket.send({
+       message: "เล่าเรื่องยาวๆ",
+       session_id: "session_123",
+       use_history: true
+     })
+
+2. Backend stream response กลับมา
+   → { type: "start", session_id: "session_123" }
+   → { type: "chunk", content: "กา" }
+   → { type: "chunk", content: "ลค" }
+   → { type: "chunk", content: "รั้" }
+   → { type: "done", tokens_used: 250 }
+
+3. Frontend แสดงข้อความทีละตัวอักษร
+```
+
+---
+
+## การทดสอบ
+
+### 1. ทดสอบ API Integration
 
 ```bash
-# Build frontend
-npm run build
+# ทดสอบ Chat API
+curl -X POST http://localhost:3000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "สวัสดี",
+    "session_id": "test_session",
+    "use_history": true
+  }'
 
-# Preview production build
-npm run preview
+# ทดสอบ File Upload
+curl -X POST http://localhost:3000/api/file/analyze \
+  -F "file=@test.pdf" \
+  -F "session_id=test_session" \
+  -F "analysis_type=summary"
 ```
 
-### Nginx Configuration
+### 2. ทดสอบ WebSocket
 
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com;
+```javascript
+const ws = new WebSocket('ws://localhost:3000/api/chat/stream')
 
-    root /var/www/chatbot/dist;
-    index index.html;
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    message: 'ทดสอบ WebSocket',
+    session_id: 'test_session',
+    use_history: true
+  }))
+}
 
-    # Frontend - Vue Router history mode
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Backend API proxy
-    location /api/ {
-        proxy_pass http://localhost:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-
-    # WebSocket proxy
-    location /api/chat/stream {
-        proxy_pass http://localhost:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "Upgrade";
-        proxy_set_header Host $host;
-        proxy_read_timeout 86400;
-    }
-
-    # Gzip compression
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+ws.onmessage = (event) => {
+  console.log('Response:', JSON.parse(event.data))
 }
 ```
-
-### Docker Deployment
-
-**Dockerfile:**
-```dockerfile
-# Build stage
-FROM node:20-alpine AS build
-
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm ci
-
-COPY . .
-RUN npm run build
-
-# Production stage
-FROM nginx:alpine
-
-COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
-```
-
-### Environment Variables for Production
-
-Create `.env.production`:
-```env
-VITE_API_BASE_URL=https://api.yourdomain.com/api
-VITE_WS_URL=wss://api.yourdomain.com/api/chat/stream
-VITE_APP_TITLE=ChatBot AI
-```
-
----
-
-## Development Checklist
-
-### Day 1: Project Setup
-- [ ] Initialize Vue 3 project with Vite
-- [ ] Install all dependencies
-- [ ] Configure Tailwind CSS
-- [ ] Set up environment variables
-- [ ] Create project structure
-
-### Day 2: API Integration
-- [ ] Create Axios instance with interceptors
-- [ ] Implement chat service
-- [ ] Implement persona service
-- [ ] Implement audio service
-- [ ] Set up Pinia stores
-
-### Day 3: Core Components
-- [ ] Create MessageBubble component
-- [ ] Create MessageList component
-- [ ] Create MessageInput component
-- [ ] Create PersonaSelector component
-- [ ] Implement basic styling
-
-### Day 4: WebSocket Integration
-- [ ] Implement useWebSocket composable
-- [ ] Connect WebSocket to chat store
-- [ ] Handle streaming messages
-- [ ] Add error handling and reconnection
-
-### Day 5: Audio Recording
-- [ ] Implement useAudioRecorder composable
-- [ ] Create AudioRecorder component
-- [ ] Integrate with transcription API
-- [ ] Test audio recording flow
-
-### Day 6: Polish & Testing
-- [ ] Add loading states
-- [ ] Implement error handling
-- [ ] Write unit tests
-- [ ] Write E2E tests
-- [ ] Test on different browsers
-
-### Day 7: Deployment
-- [ ] Build for production
-- [ ] Configure Nginx
-- [ ] Set up SSL certificate
-- [ ] Deploy to production server
-- [ ] Monitor and optimize
-
----
-
-## Best Practices
-
-1. **Component Composition**: Break down complex components into smaller, reusable pieces
-2. **State Management**: Use Pinia stores for global state, props/emits for local communication
-3. **Error Handling**: Always wrap API calls in try-catch blocks and show user-friendly error messages
-4. **Performance**: Use `v-memo`, `computed` properties, and lazy loading for optimal performance
-5. **Accessibility**: Include proper ARIA labels, keyboard navigation, and focus management
-6. **Code Quality**: Use ESLint, Prettier, and TypeScript for better code quality
-7. **Git Workflow**: Follow conventional commits and create feature branches
 
 ---
 
 ## Troubleshooting
 
-### WebSocket Connection Issues
+### ปัญหาที่อาจพบ
 
-**Problem**: WebSocket fails to connect
-**Solution**:
-- Check if backend server is running
-- Verify VITE_WS_URL in .env file
-- Check browser console for CORS errors
-- Ensure WebSocket endpoint is not blocked by firewall
+**1. WebSocket Connection Failed**
+```
+Solution:
+- ตรวจสอบ Backend รันที่ port 3000
+- ตรวจสอบ VITE_WS_URL ใน .env
+- เช็ค CORS settings
+```
 
-### Audio Recording Not Working
+**2. File Upload Failed**
+```
+Solution:
+- ตรวจสอบขนาดไฟล์ (PDF max 10MB, Image max 20MB)
+- ตรวจสอบ file type
+- เช็ค multipart/form-data header
+```
 
-**Problem**: MediaRecorder API fails
-**Solution**:
-- Check browser compatibility (Chrome/Edge recommended)
-- Ensure HTTPS is enabled (required for getUserMedia)
-- Grant microphone permissions
-- Check if another app is using the microphone
-
-### Build Errors
-
-**Problem**: Build fails with module errors
-**Solution**:
-- Delete node_modules and package-lock.json
-- Run `npm install` again
-- Check Node.js version (use 18+ or 20+)
-- Clear Vite cache: `rm -rf node_modules/.vite`
-
----
-
-## Additional Resources
-
-- [Vue 3 Documentation](https://vuejs.org/)
-- [Vite Documentation](https://vitejs.dev/)
-- [Pinia Documentation](https://pinia.vuejs.org/)
-- [Tailwind CSS Documentation](https://tailwindcss.com/)
-- [WebSocket API Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket)
-- [MediaRecorder API Documentation](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder)
+**3. Session History ไม่ทำงาน**
+```
+Solution:
+- ตรวจสอบ session_id ถูกส่งไปหรือไม่
+- ตรวจสอบ use_history: true
+- เช็ค Database มี messages ใน session นั้นหรือไม่
+```
 
 ---
 
-**Last Updated**: {{ Current Date }}
-**Document Version**: 1.0.0
-**Maintained By**: Development Team
+## Checklist สำหรับการพัฒนา
+
+### Phase 1: Core Features ⚡
+- [ ] Session Management (สร้าง/จัดการ session_id)
+- [ ] File Upload UI (FileUpload.vue)
+- [ ] อัพเดต MessageInput รองรับไฟล์
+- [ ] อัพเดต chatService เพิ่ม session_id, use_history
+- [ ] สร้าง fileService.js
+- [ ] ทดสอบส่งข้อความพร้อมไฟล์
+
+### Phase 2: WebSocket Streaming
+- [ ] ปรับ useWebSocket รองรับ session
+- [ ] ทดสอบ streaming responses
+- [ ] แสดง typing indicator
+
+### Phase 3: UI/UX Polish
+- [ ] แสดงไฟล์ที่แนบใน message bubbles
+- [ ] Loading states
+- [ ] Error handling
+- [ ] Responsive design
+
+### Phase 4: Testing
+- [ ] ทดสอบ File Upload flow
+- [ ] ทดสอบ Session History
+- [ ] ทดสอบ WebSocket Streaming
+- [ ] ทดสอบบน Mobile
+
+---
+
+## API Base URL
+
+**Development**:
+```
+HTTP: http://localhost:3000/api
+WebSocket: ws://localhost:3000/api/chat/stream
+```
+
+**Production** (เมื่อ deploy):
+```
+HTTP: https://your-domain.com/api
+WebSocket: wss://your-domain.com/api/chat/stream
+```
+
+---
+
+## สรุป
+
+Backend **พร้อมใช้งาน 95%** แล้ว มี API endpoints ครบถ้วน
+Frontend ต้อง**พัฒนาเพิ่ม** 4 ส่วนหลัก:
+
+1. ✅ **File Upload UI** - รองรับหลายไฟล์
+2. ✅ **Session Management** - จัดการ conversation history
+3. ✅ **WebSocket Integration** - Real-time streaming
+4. ✅ **UI Polish** - แสดงไฟล์แนบ, loading states
+
+ใช้เวลาพัฒนาประมาณ **2 สัปดาห์** หากทำเต็มเวลา
+
+---
+
+**อัพเดตล่าสุด**: 2025-11-01
+**Next Update**: เมื่อเริ่มพัฒนา Frontend
