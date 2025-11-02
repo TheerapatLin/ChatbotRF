@@ -155,6 +155,17 @@ func (s *FileService) ValidateFile(file *multipart.FileHeader) error {
 func (s *FileService) AnalyzeFile(ctx context.Context, req FileAnalysisRequest) (*FileAnalysisResponse, error) {
 	startTime := time.Now()
 
+	// Debug: Log request parameters
+	fmt.Printf("\n🔍 === FILE ANALYSIS REQUEST ===\n")
+	fmt.Printf("   Filename: %s\n", req.File.Filename)
+	fmt.Printf("   Analysis Type: %s\n", req.AnalysisType)
+	fmt.Printf("   Language: %s\n", req.Language)
+	fmt.Printf("   Session ID: %s\n", req.SessionID)
+	fmt.Printf("   Use History: %v\n", req.UseHistory)
+	fmt.Printf("   Has System Prompt: %v\n", req.SystemPrompt != "")
+	fmt.Printf("   Has Custom Prompt: %v\n", req.Prompt != "")
+	fmt.Printf("================================\n\n")
+
 	// Validate file
 	if err := s.ValidateFile(req.File); err != nil {
 		return nil, err
@@ -173,13 +184,29 @@ func (s *FileService) AnalyzeFile(ctx context.Context, req FileAnalysisRequest) 
 		return nil, fmt.Errorf("failed to extract text from file: %w", err)
 	}
 
+	// Debug: Log extracted text length
+	fmt.Printf("📄 File: %s (Size: %d bytes)\n", req.File.Filename, req.File.Size)
+	fmt.Printf("📝 Extracted text length: %d characters\n", len(text))
+	if len(text) > 0 {
+		// Show first 100 chars of extracted text
+		preview := text
+		if len(preview) > 100 {
+			preview = preview[:100] + "..."
+		}
+		fmt.Printf("📋 Text preview: %s\n", preview)
+	} else {
+		fmt.Printf("⚠️  WARNING: Extracted text is EMPTY!\n")
+	}
+
 	// If text is too long, chunk it
 	if len(text) > 15000 {
 		text = text[:15000] + "\n\n... (truncated)"
+		fmt.Printf("✂️  Text truncated to 15000 characters\n")
 	}
 
 	// Build analysis prompt
 	prompt := s.buildAnalysisPrompt(req.AnalysisType, req.Prompt, req.Language, text)
+	fmt.Printf("📤 Final prompt length: %d characters\n", len(prompt))
 
 	// Build messages array with optional system prompt
 	var messages []openai.ChatCompletionMessage
@@ -544,11 +571,14 @@ func extractSummary(text string) string {
 func (s *FileService) extractPDFText(reader io.ReaderAt, size int64) (string, error) {
 	pdfReader, err := pdf.NewReader(reader, size)
 	if err != nil {
+		fmt.Printf("❌ Failed to open PDF: %v\n", err)
 		return "", fmt.Errorf("failed to open PDF: %w", err)
 	}
 
 	var text strings.Builder
 	numPages := pdfReader.NumPage()
+
+	fmt.Printf("📖 PDF has %d pages\n", numPages)
 
 	// Limit to first 50 pages to avoid excessive processing
 	maxPages := numPages
@@ -556,23 +586,39 @@ func (s *FileService) extractPDFText(reader io.ReaderAt, size int64) (string, er
 		maxPages = 50
 	}
 
+	successfulPages := 0
+	failedPages := 0
+
 	for pageNum := 1; pageNum <= maxPages; pageNum++ {
 		page := pdfReader.Page(pageNum)
 		if page.V.IsNull() {
+			fmt.Printf("⚠️  Page %d: V is null, skipping\n", pageNum)
+			failedPages++
 			continue
 		}
 
 		pageText, err := page.GetPlainText(nil)
 		if err != nil {
-			// Skip pages with errors
+			fmt.Printf("⚠️  Page %d: GetPlainText error: %v\n", pageNum, err)
+			failedPages++
 			continue
 		}
 
-		text.WriteString(pageText)
-		text.WriteString("\n\n")
+		if len(pageText) > 0 {
+			text.WriteString(pageText)
+			text.WriteString("\n\n")
+			successfulPages++
+			fmt.Printf("✅ Page %d: Extracted %d characters\n", pageNum, len(pageText))
+		} else {
+			fmt.Printf("⚠️  Page %d: No text content\n", pageNum)
+			failedPages++
+		}
 	}
 
+	fmt.Printf("📊 PDF extraction summary: %d successful, %d failed out of %d pages\n", successfulPages, failedPages, maxPages)
+
 	if text.Len() == 0 {
+		fmt.Printf("❌ WARNING: No text extracted from PDF! Returning placeholder.\n")
 		return "[PDF file - no text content extracted]", nil
 	}
 

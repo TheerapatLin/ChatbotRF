@@ -75,7 +75,24 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 		log.Printf("⚠️  Failed to save file analysis to database: %v", err)
 	}
 
-	return utils.SuccessJSON(c, result)
+	// 5. Build ChatResponse-style response
+	response := fiber.Map{
+		"message_id":  result.FileID,
+		"session_id":  sessionID,
+		"reply":       result.Analysis,
+		"summary":     result.Summary,
+		"tokens_used": result.TokensUsed,
+		"model":       "gpt-4o-mini",
+		"timestamp":   time.Now(),
+		"file_info": fiber.Map{
+			"file_id":   result.FileID,
+			"filename":  result.FileName,
+			"file_type": result.FileType,
+			"file_size": result.FileSize,
+		},
+	}
+
+	return utils.SuccessJSON(c, response)
 }
 
 // parseFileRequest parses and validates file upload request
@@ -133,24 +150,52 @@ func (ctrl *FileController) analyzeImageFile(c *fiber.Ctx, file *multipart.FileH
 	}
 	defer fileData.Close()
 
+	// Get session_id from form
+	sessionID := c.FormValue("session_id")
+
 	// Analyze image (pass systemPrompt to service if needed)
 	analysis, err := ctrl.fileService.AnalyzeImage(c.Context(), fileData, file.Filename, prompt, systemPrompt)
 	if err != nil {
 		return utils.InternalError(c, fmt.Sprintf("failed to analyze image: %v", err))
 	}
 
-	// Build response
-	response := services.FileAnalysisResponse{
-		FileID:      generateFileID(),
+	// Build internal response for saving
+	fileID := generateFileID()
+	summary := extractFirstSentence(analysis)
+
+	// Save to database (optional for images)
+	result := &services.FileAnalysisResponse{
+		FileID:      fileID,
 		FileName:    file.Filename,
 		FileType:    contentType,
 		FileSize:    file.Size,
 		Analysis:    analysis,
-		Summary:     extractFirstSentence(analysis),
+		Summary:     summary,
 		KeyPoints:   []string{},
 		Language:    language,
 		TokensUsed:  0,
 		ProcessTime: 0,
+	}
+
+	if err := ctrl.saveFileAnalysis(result, "image_analysis", prompt, language, sessionID); err != nil {
+		log.Printf("⚠️  Failed to save image analysis to database: %v", err)
+	}
+
+	// Build ChatResponse-style response
+	response := fiber.Map{
+		"message_id":  fileID,
+		"session_id":  sessionID,
+		"reply":       analysis,
+		"summary":     summary,
+		"tokens_used": 0,
+		"model":       "gpt-4o-mini",
+		"timestamp":   time.Now(),
+		"file_info": fiber.Map{
+			"file_id":   fileID,
+			"filename":  file.Filename,
+			"file_type": contentType,
+			"file_size": file.Size,
+		},
 	}
 
 	return utils.SuccessJSON(c, response)
