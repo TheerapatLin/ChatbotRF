@@ -113,6 +113,8 @@
 
 <script setup>
 import { ref } from 'vue'
+import { formatFileSize } from '@/utils/formatters'
+import { MAX_FILES_PER_UPLOAD, MAX_FILE_SIZE } from '@/config/constants'
 
 const props = defineProps({
   disabled: {
@@ -121,11 +123,11 @@ const props = defineProps({
   },
   maxFiles: {
     type: Number,
-    default: 5
+    default: MAX_FILES_PER_UPLOAD
   },
   maxFileSize: {
     type: Number,
-    default: 20 * 1024 * 1024 // 20MB
+    default: MAX_FILE_SIZE
   }
 })
 
@@ -169,14 +171,6 @@ const handleFileSelect = (event) => {
 const removeFile = (index) => {
   selectedFiles.value.splice(index, 1)
   emit('files-selected', selectedFiles.value)
-}
-
-const formatFileSize = (bytes) => {
-  if (bytes === 0) return '0 Bytes'
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
 }
 
 const getFileType = (file) => {

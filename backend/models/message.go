@@ -11,17 +11,16 @@ import (
 
 // FileAttachment represents a file attached to a message
 type FileAttachment struct {
-	FileID          string `json:"file_id"`
-	Filename        string `json:"filename"`
-	FileType        string `json:"file_type"`
-	FileSize        int64  `json:"file_size"`
-	AnalysisSummary string `json:"analysis_summary"`
+	FileID   string `json:"file_id"`
+	Filename string `json:"filename"`
+	FileType string `json:"file_type"`
+	FileSize int64  `json:"file_size"`
 }
 
 // Message represents a chat message (simplified for learning project)
 type Message struct {
 	ID              uuid.UUID      `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
-	SessionID       string         `gorm:"type:varchar(100);index" json:"session_id"`                                      // Session identifier for grouping conversations
+	SessionID       string         `gorm:"type:varchar(100);index" json:"session_id"` // Session identifier for grouping conversations
 	Role            string         `gorm:"type:varchar(20);not null;check:role IN ('user', 'assistant', 'system')" json:"role"`
 	Content         string         `gorm:"type:text;not null" json:"content"`
 	PersonaID       *int           `json:"persona_id,omitempty"`
@@ -51,7 +50,7 @@ func (m *Message) BeforeCreate(tx *gorm.DB) error {
 func (m *Message) GetFileAttachments() ([]FileAttachment, error) {
 	var attachments []FileAttachment
 
-	if m.FileAttachments == nil || len(m.FileAttachments) == 0 {
+	if len(m.FileAttachments) == 0 {
 		return attachments, nil
 	}
 

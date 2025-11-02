@@ -291,11 +291,10 @@ func (ctrl *ChatController) buildFileAttachments(fileIDs []string) ([]models.Fil
 		}
 
 		attachments = append(attachments, models.FileAttachment{
-			FileID:          fileID,
-			Filename:        analysis.FileName,
-			FileType:        analysis.FileType,
-			FileSize:        analysis.FileSize,
-			AnalysisSummary: analysis.Summary,
+			FileID:   fileID,
+			Filename: analysis.FileName,
+			FileType: analysis.FileType,
+			FileSize: analysis.FileSize,
 		})
 	}
 

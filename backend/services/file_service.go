@@ -50,7 +50,6 @@ type FileAnalysisResponse struct {
 	FileType    string    `json:"file_type"`
 	FileSize    int64     `json:"file_size"`
 	Analysis    string    `json:"analysis"`
-	Summary     string    `json:"summary"`
 	KeyPoints   []string  `json:"key_points"`
 	Entities    []string  `json:"entities,omitempty"`
 	Sentiment   string    `json:"sentiment,omitempty"`
@@ -268,7 +267,6 @@ func (s *FileService) AnalyzeFile(ctx context.Context, req FileAnalysisRequest) 
 		FileType:    req.File.Header.Get("Content-Type"),
 		FileSize:    req.File.Size,
 		Analysis:    analysis,
-		Summary:     extractSummary(analysis),
 		KeyPoints:   keyPoints,
 		Language:    req.Language,
 		TokensUsed:  chatResp.Usage.TotalTokens,
@@ -545,26 +543,6 @@ func extractKeyPoints(text string) []string {
 	}
 
 	return keyPoints
-}
-
-func extractSummary(text string) string {
-	// Extract first paragraph or first 200 characters as summary
-	lines := strings.Split(text, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if len(line) > 50 {
-			if len(line) > 200 {
-				return line[:200] + "..."
-			}
-			return line
-		}
-	}
-
-	// Fallback: just take first 200 chars
-	if len(text) > 200 {
-		return text[:200] + "..."
-	}
-	return text
 }
 
 // extractPDFText extracts text from PDF files

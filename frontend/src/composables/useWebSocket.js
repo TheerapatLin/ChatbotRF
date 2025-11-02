@@ -1,5 +1,6 @@
 import { ref, onUnmounted } from 'vue'
 import { useChatStore } from '@/store/chat'
+import { WS_RECONNECT_DELAY } from '@/config/constants'
 
 export function useWebSocket() {
   const ws = ref(null)
@@ -54,7 +55,7 @@ export function useWebSocket() {
         reconnectTimer.value = setTimeout(() => {
           console.log('Attempting to reconnect...')
           connect()
-        }, 3000)
+        }, WS_RECONNECT_DELAY)
       }
     } catch (error) {
       console.error('Failed to create WebSocket connection:', error)

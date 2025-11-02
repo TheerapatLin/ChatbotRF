@@ -41,7 +41,7 @@
                     : 'bg-gray-100 text-gray-700'
                 ]"
               >
-                <span class="font-medium">{{ getFileIcon(file.file_type) }}</span>
+                <span class="font-medium">{{ getFileTypeIcon(file.file_type) }}</span>
                 <span class="truncate flex-1" :title="file.filename">{{ file.filename }}</span>
                 <span class="text-xs opacity-75">{{ formatFileSize(file.file_size) }}</span>
               </div>
@@ -74,6 +74,8 @@
 
 <script setup>
 import { computed } from 'vue'
+import { formatTime, formatFileSize } from '@/utils/formatters'
+import { getFileTypeIcon } from '@/utils/fileHelpers'
 
 const props = defineProps({
   message: {
@@ -106,31 +108,4 @@ const attachments = computed(() => {
   // If it's already an array, return it
   return Array.isArray(fileData) ? fileData : []
 })
-
-const formatTime = (timestamp) => {
-  return new Date(timestamp).toLocaleTimeString('th-TH', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
-const getFileIcon = (fileType) => {
-  if (!fileType) return '📄'
-
-  const type = fileType.toLowerCase()
-  if (type.includes('pdf')) return '📕'
-  if (type.includes('word') || type.includes('docx')) return '📘'
-  if (type.includes('excel') || type.includes('xlsx')) return '📗'
-  if (type.includes('image') || type.includes('png') || type.includes('jpg') || type.includes('jpeg')) return '🖼️'
-  if (type.includes('text')) return '📄'
-  return '📄'
-}
-
-const formatFileSize = (bytes) => {
-  if (!bytes) return ''
-
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
 </script>

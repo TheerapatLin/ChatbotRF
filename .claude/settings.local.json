@@ -35,7 +35,8 @@
       "Bash(ping:*)",
       "Bash(nul)",
       "Bash(cat:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []

@@ -74,6 +74,8 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { formatFileSize } from '@/utils/formatters'
+import { getFileTypeIcon, getFileTypeColor } from '@/utils/fileHelpers'
 
 const props = defineProps({
   file: {
@@ -99,30 +101,6 @@ const handleDelete = () => {
   emit('delete')
 }
 
-const getFileTypeIcon = (fileType) => {
-  if (!fileType) return '📄'
-
-  const type = fileType.toLowerCase()
-  if (type.includes('pdf')) return 'PDF'
-  if (type.includes('word') || type.includes('docx')) return 'DOC'
-  if (type.includes('excel') || type.includes('xlsx')) return 'XLS'
-  if (type.includes('image') || type.includes('png') || type.includes('jpg') || type.includes('jpeg')) return '🖼️'
-  if (type.includes('text')) return 'TXT'
-  return '📄'
-}
-
-const getFileTypeColor = (fileType) => {
-  if (!fileType) return 'bg-gray-500'
-
-  const type = fileType.toLowerCase()
-  if (type.includes('pdf')) return 'bg-red-500'
-  if (type.includes('word') || type.includes('docx')) return 'bg-blue-500'
-  if (type.includes('excel') || type.includes('xlsx')) return 'bg-green-500'
-  if (type.includes('image') || type.includes('png') || type.includes('jpg') || type.includes('jpeg')) return 'bg-purple-500'
-  if (type.includes('text')) return 'bg-gray-500'
-  return 'bg-gray-500'
-}
-
 const formatFileType = (fileType) => {
   if (!fileType) return 'Unknown'
 
@@ -133,14 +111,6 @@ const formatFileType = (fileType) => {
   if (type.includes('image')) return 'Image'
   if (type.includes('text')) return 'Text File'
   return fileType
-}
-
-const formatFileSize = (bytes) => {
-  if (!bytes) return ''
-
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 const getStatusClass = (status) => {

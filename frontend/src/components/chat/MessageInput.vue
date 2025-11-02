@@ -1,13 +1,6 @@
 <template>
   <div class="border-t bg-white p-4">
     <div class="max-w-4xl mx-auto">
-      <!-- Uploaded Files List -->
-      <FileList
-        v-if="chatStore.uploadedFiles.length > 0"
-        :show-delete="true"
-        :show-clear-button="true"
-      />
-
       <!-- File Upload Component -->
       <div class="mb-3">
         <FileUpload
@@ -18,28 +11,6 @@
       </div>
 
       <div class="flex items-end gap-3">
-        <!-- Microphone Button (for Speech mode) -->
-        <button
-          v-if="chatMode === 'speech'"
-          @click="toggleRecording"
-          :class="[
-            'p-3 rounded-full transition-all',
-            isRecording
-              ? 'bg-red-500 hover:bg-red-600 animate-pulse'
-              : 'bg-gray-200 hover:bg-gray-300'
-          ]"
-          :disabled="isStreaming"
-        >
-          <svg
-            class="w-5 h-5"
-            :class="isRecording ? 'text-white' : 'text-gray-600'"
-            fill="currentColor"
-            viewBox="0 0 20 20"
-          >
-            <path d="M7 4a3 3 0 016 0v6a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z"/>
-          </svg>
-        </button>
-
         <!-- Text Input -->
         <div class="flex-1">
           <textarea
@@ -65,12 +36,6 @@
         </button>
       </div>
 
-      <!-- Recording Indicator -->
-      <div v-if="isRecording" class="mt-2 text-sm text-red-500 flex items-center justify-center gap-2">
-        <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-        กำลังบันทึกเสียง...
-      </div>
-
       <!-- Uploading Indicator -->
       <div v-if="isUploading" class="mt-2 text-sm text-blue-500 flex items-center justify-center gap-2">
         <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -86,12 +51,9 @@
 <script setup>
 import { ref, computed, inject, nextTick } from 'vue'
 import { useChatStore } from '@/store/chat'
-import { useAudioRecorder } from '@/composables/useAudioRecorder'
 import FileUpload from '@/components/file/FileUpload.vue'
-import FileList from '@/components/file/FileList.vue'
 
 const chatStore = useChatStore()
-const { isRecording, startRecording, stopRecording } = useAudioRecorder()
 
 // Get WebSocket from parent component
 const wsConnection = inject('wsConnection', null)
@@ -103,7 +65,6 @@ const selectedFiles = ref([])
 const isUploading = ref(false)
 
 const isStreaming = computed(() => chatStore.isStreaming)
-const chatMode = computed(() => chatStore.chatMode)
 const canSend = computed(() => {
   return message.value.trim() || selectedFiles.value.length > 0
 })
@@ -128,10 +89,17 @@ const sendMessage = async () => {
     isUploading.value = false
   }
 
+  // Build user message with file attachments
   const userMessage = {
     role: 'user',
     content: message.value || '(แนบไฟล์)',
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    file_attachments: chatStore.uploadedFiles.map(file => ({
+      file_id: file.fileId,
+      filename: file.filename,
+      file_type: file.fileType,
+      file_size: file.fileSize
+    }))
   }
 
   chatStore.addMessage(userMessage)
@@ -152,6 +120,9 @@ const sendMessage = async () => {
   message.value = ''
   selectedFiles.value = []
 
+  // Clear uploaded files from store
+  chatStore.clearUploadedFiles()
+
   // Clear file upload component
   if (fileUploadRef.value) {
     fileUploadRef.value.clearFiles()
@@ -161,18 +132,6 @@ const sendMessage = async () => {
   await nextTick()
   if (textareaRef.value) {
     textareaRef.value.focus()
-  }
-}
-
-const toggleRecording = async () => {
-  if (isRecording.value) {
-    const audioBlob = await stopRecording()
-    if (audioBlob) {
-      console.log('Audio recorded:', audioBlob.size, 'bytes')
-      console.log('Transcription integration needed')
-    }
-  } else {
-    await startRecording()
   }
 }
 </script>

@@ -20,7 +20,6 @@ type FileAnalysis struct {
 	CustomPrompt    string         `gorm:"type:text" json:"custom_prompt,omitempty"`
 	Language        string         `gorm:"type:varchar(10)" json:"language"` // th, en
 	Analysis        string         `gorm:"type:text" json:"analysis"`
-	Summary         string         `gorm:"type:text" json:"summary"`
 	KeyPoints       pq.StringArray `gorm:"type:text[]" json:"key_points"`
 	Entities        pq.StringArray `gorm:"type:text[]" json:"entities,omitempty"`
 	Sentiment       string         `gorm:"type:varchar(50)" json:"sentiment,omitempty"`

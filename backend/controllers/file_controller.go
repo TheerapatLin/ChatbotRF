@@ -18,9 +18,9 @@ import (
 
 // FileController handles file analysis HTTP requests
 type FileController struct {
-	fileService   *services.FileService
-	repository    *repositories.FileAnalysisRepository
-	messageRepo   *repositories.MessageRepository
+	fileService *services.FileService
+	repository  *repositories.FileAnalysisRepository
+	messageRepo *repositories.MessageRepository
 }
 
 // NewFileController creates a new file controller
@@ -80,7 +80,7 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 
 	// 5. Save messages to database (like HandleChat does)
 	if sessionID != "" {
-		if err := ctrl.saveFileAnalysisMessages(file.Filename, result, sessionID); err != nil {
+		if err := ctrl.saveFileAnalysisMessages(file.Filename, prompt, result, sessionID); err != nil {
 			log.Printf("⚠️  Failed to save file analysis messages: %v", err)
 		}
 	}
@@ -90,7 +90,6 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 		"message_id":  result.FileID,
 		"session_id":  sessionID,
 		"reply":       result.Analysis,
-		"summary":     result.Summary,
 		"tokens_used": result.TokensUsed,
 		"model":       "gpt-4o-mini",
 		"timestamp":   time.Now(),
@@ -171,7 +170,6 @@ func (ctrl *FileController) analyzeImageFile(c *fiber.Ctx, file *multipart.FileH
 
 	// Build internal response for saving
 	fileID := generateFileID()
-	summary := extractFirstSentence(analysis)
 
 	// Save to database (optional for images)
 	result := &services.FileAnalysisResponse{
@@ -180,7 +178,6 @@ func (ctrl *FileController) analyzeImageFile(c *fiber.Ctx, file *multipart.FileH
 		FileType:    contentType,
 		FileSize:    file.Size,
 		Analysis:    analysis,
-		Summary:     summary,
 		KeyPoints:   []string{},
 		Language:    language,
 		TokensUsed:  0,
@@ -193,7 +190,7 @@ func (ctrl *FileController) analyzeImageFile(c *fiber.Ctx, file *multipart.FileH
 
 	// Save messages to database (like HandleChat does)
 	if sessionID != "" {
-		if err := ctrl.saveFileAnalysisMessages(file.Filename, result, sessionID); err != nil {
+		if err := ctrl.saveFileAnalysisMessages(file.Filename, prompt, result, sessionID); err != nil {
 			log.Printf("⚠️  Failed to save image analysis messages: %v", err)
 		}
 	}
@@ -203,7 +200,6 @@ func (ctrl *FileController) analyzeImageFile(c *fiber.Ctx, file *multipart.FileH
 		"message_id":  fileID,
 		"session_id":  sessionID,
 		"reply":       analysis,
-		"summary":     summary,
 		"tokens_used": 0,
 		"model":       "gpt-4o-mini",
 		"timestamp":   time.Now(),
@@ -258,7 +254,6 @@ func (ctrl *FileController) saveFileAnalysis(result *services.FileAnalysisRespon
 		CustomPrompt:  sanitizeUTF8(prompt),
 		Language:      language,
 		Analysis:      sanitizeUTF8(result.Analysis),
-		Summary:       sanitizeUTF8(result.Summary),
 		KeyPoints:     pq.StringArray(sanitizeStringArray(result.KeyPoints)),
 		Entities:      pq.StringArray(sanitizeStringArray(result.Entities)),
 		Sentiment:     result.Sentiment,
@@ -356,18 +351,6 @@ func generateFileID() string {
 	return fmt.Sprintf("file_%d", time.Now().UnixNano())
 }
 
-func extractFirstSentence(text string) string {
-	// Extract first sentence for summary
-	sentences := strings.Split(text, ".")
-	if len(sentences) > 0 && len(sentences[0]) > 10 {
-		return strings.TrimSpace(sentences[0]) + "."
-	}
-	if len(text) > 200 {
-		return text[:200] + "..."
-	}
-	return text
-}
-
 // sanitizeUTF8 removes invalid UTF-8 sequences from a string
 func sanitizeUTF8(s string) string {
 	if utf8.ValidString(s) {
@@ -402,25 +385,29 @@ func sanitizeStringArray(arr []string) []string {
 
 // saveFileAnalysisMessages saves user message and AI response to messages table
 // Similar to ChatController.saveMessages
-func (ctrl *FileController) saveFileAnalysisMessages(filename string, result *services.FileAnalysisResponse, sessionID string) error {
+func (ctrl *FileController) saveFileAnalysisMessages(filename, prompt string, result *services.FileAnalysisResponse, sessionID string) error {
 	if ctrl.messageRepo == nil {
 		return fmt.Errorf("message repository not initialized")
 	}
 
 	// 1. Save user message (file upload request)
+	content := fmt.Sprintf("อัปโหลดไฟล์: %s", filename)
+	if prompt != "" {
+		content = fmt.Sprintf("อัปโหลดไฟล์: %s\nคำสั่ง: %s", filename, prompt)
+	}
+
 	userMessage := &models.Message{
 		SessionID: sessionID,
 		Role:      models.RoleUser,
-		Content:   fmt.Sprintf("อัปโหลดไฟล์: %s", filename),
+		Content:   content,
 	}
 
 	// Add file attachment info
 	attachment := models.FileAttachment{
-		FileID:          result.FileID,
-		Filename:        result.FileName,
-		FileType:        result.FileType,
-		FileSize:        result.FileSize,
-		AnalysisSummary: result.Summary,
+		FileID:   result.FileID,
+		Filename: result.FileName,
+		FileType: result.FileType,
+		FileSize: result.FileSize,
 	}
 
 	if err := userMessage.SetFileAttachments([]models.FileAttachment{attachment}); err != nil {

@@ -85,15 +85,18 @@ export const useChatStore = defineStore('chat', {
             language: 'th'
           })
 
+          // Response ตอนนี้เป็นรูปแบบเดียวกับ ChatResponse
+          // มี file_info ซ้อนอยู่ข้างใน
+          const fileInfo = result.file_info || {}
+
           this.uploadedFiles.push({
-            fileId: result.file_id,
-            filename: result.filename,
-            summary: result.summary,
-            fileType: result.file_type,
-            fileSize: result.file_size
+            fileId: fileInfo.file_id || result.message_id,
+            filename: fileInfo.filename,
+            fileType: fileInfo.file_type,
+            fileSize: fileInfo.file_size
           })
 
-          console.log('File uploaded:', result.filename)
+          console.log('File uploaded:', fileInfo.filename)
           return result
         } catch (error) {
           console.error('Failed to upload file:', file.name, error)

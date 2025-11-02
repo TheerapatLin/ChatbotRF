@@ -286,11 +286,10 @@ func (ctrl *WebSocketController) buildFileAttachments(fileIDs []string) ([]model
 		}
 
 		attachments = append(attachments, models.FileAttachment{
-			FileID:          fileID,
-			Filename:        analysis.FileName,
-			FileType:        analysis.FileType,
-			FileSize:        analysis.FileSize,
-			AnalysisSummary: analysis.Summary,
+			FileID:   fileID,
+			Filename: analysis.FileName,
+			FileType: analysis.FileType,
+			FileSize: analysis.FileSize,
 		})
 	}
 
