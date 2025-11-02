@@ -18,18 +18,21 @@ import (
 
 // FileController handles file analysis HTTP requests
 type FileController struct {
-	fileService *services.FileService
-	repository  *repositories.FileAnalysisRepository
+	fileService   *services.FileService
+	repository    *repositories.FileAnalysisRepository
+	messageRepo   *repositories.MessageRepository
 }
 
 // NewFileController creates a new file controller
 func NewFileController(
 	fileService *services.FileService,
 	repository *repositories.FileAnalysisRepository,
+	messageRepo *repositories.MessageRepository,
 ) *FileController {
 	return &FileController{
 		fileService: fileService,
 		repository:  repository,
+		messageRepo: messageRepo,
 	}
 }
 
@@ -75,7 +78,14 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 		log.Printf("⚠️  Failed to save file analysis to database: %v", err)
 	}
 
-	// 5. Build ChatResponse-style response
+	// 5. Save messages to database (like HandleChat does)
+	if sessionID != "" {
+		if err := ctrl.saveFileAnalysisMessages(file.Filename, result, sessionID); err != nil {
+			log.Printf("⚠️  Failed to save file analysis messages: %v", err)
+		}
+	}
+
+	// 6. Build ChatResponse-style response
 	response := fiber.Map{
 		"message_id":  result.FileID,
 		"session_id":  sessionID,
@@ -179,6 +189,13 @@ func (ctrl *FileController) analyzeImageFile(c *fiber.Ctx, file *multipart.FileH
 
 	if err := ctrl.saveFileAnalysis(result, "image_analysis", prompt, language, sessionID); err != nil {
 		log.Printf("⚠️  Failed to save image analysis to database: %v", err)
+	}
+
+	// Save messages to database (like HandleChat does)
+	if sessionID != "" {
+		if err := ctrl.saveFileAnalysisMessages(file.Filename, result, sessionID); err != nil {
+			log.Printf("⚠️  Failed to save image analysis messages: %v", err)
+		}
 	}
 
 	// Build ChatResponse-style response
@@ -381,4 +398,52 @@ func sanitizeStringArray(arr []string) []string {
 		result[i] = sanitizeUTF8(s)
 	}
 	return result
+}
+
+// saveFileAnalysisMessages saves user message and AI response to messages table
+// Similar to ChatController.saveMessages
+func (ctrl *FileController) saveFileAnalysisMessages(filename string, result *services.FileAnalysisResponse, sessionID string) error {
+	if ctrl.messageRepo == nil {
+		return fmt.Errorf("message repository not initialized")
+	}
+
+	// 1. Save user message (file upload request)
+	userMessage := &models.Message{
+		SessionID: sessionID,
+		Role:      models.RoleUser,
+		Content:   fmt.Sprintf("อัปโหลดไฟล์: %s", filename),
+	}
+
+	// Add file attachment info
+	attachment := models.FileAttachment{
+		FileID:          result.FileID,
+		Filename:        result.FileName,
+		FileType:        result.FileType,
+		FileSize:        result.FileSize,
+		AnalysisSummary: result.Summary,
+	}
+
+	if err := userMessage.SetFileAttachments([]models.FileAttachment{attachment}); err != nil {
+		log.Printf("⚠️  Warning: Failed to set file attachments: %v", err)
+	}
+
+	if err := ctrl.messageRepo.Create(userMessage); err != nil {
+		return fmt.Errorf("failed to save user message: %w", err)
+	}
+
+	// 2. Save AI response (analysis result)
+	tokensUsed := result.TokensUsed
+	assistantMessage := &models.Message{
+		SessionID:  sessionID,
+		Role:       models.RoleAssistant,
+		Content:    result.Analysis,
+		TokensUsed: &tokensUsed,
+	}
+
+	if err := ctrl.messageRepo.Create(assistantMessage); err != nil {
+		return fmt.Errorf("failed to save assistant message: %w", err)
+	}
+
+	log.Printf("✅ Saved file analysis messages to conversation (session: %s, file: %s)", sessionID, filename)
+	return nil
 }

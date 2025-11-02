@@ -29,7 +29,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	personaCtrl := controllers.NewPersonaController(personaRepo, messageRepo)
 	audioCtrl := controllers.NewAudioController(openaiService, ttsService)
 	wsCtrl := controllers.NewWebSocketController(messageRepo, personaRepo, fileAnalysisRepo, openaiService)
-	fileCtrl := controllers.NewFileController(fileService, fileAnalysisRepo)
+	fileCtrl := controllers.NewFileController(fileService, fileAnalysisRepo, messageRepo)
 
 	// API group
 	api := app.Group("/api")
