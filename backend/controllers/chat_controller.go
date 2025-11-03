@@ -362,3 +362,17 @@ func (ctrl *ChatController) GetChatHistory(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(response)
 }
+
+// DeleteAllMessages handles DELETE /api/chat endpoint
+func (ctrl *ChatController) DeleteAllMessages(c *fiber.Ctx) error {
+	// Delete all messages from database
+	if err := ctrl.messageRepo.DeleteAll(); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to delete messages",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "All messages deleted successfully",
+	})
+}

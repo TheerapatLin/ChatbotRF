@@ -49,7 +49,8 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 
 	// Chat endpoints
 	api.Post("/chat", chatCtrl.HandleChat)
-	api.Get("/chat/history", chatCtrl.GetChatHistory)
+	api.Get("/chats", chatCtrl.GetChatHistory)
+	api.Delete("/chats", chatCtrl.DeleteAllMessages)
 
 	// Audio endpoints
 	api.Post("/audio/transcribe", audioCtrl.TranscribeAudio)

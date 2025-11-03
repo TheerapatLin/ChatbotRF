@@ -104,3 +104,8 @@ func (r *MessageRepository) GetAllBySession(sessionID string) ([]models.Message,
 func (r *MessageRepository) DeleteSession(sessionID string) error {
 	return r.db.Where("session_id = ?", sessionID).Delete(&models.Message{}).Error
 }
+
+// DeleteAll removes all messages from the database
+func (r *MessageRepository) DeleteAll() error {
+	return r.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.Message{}).Error
+}
