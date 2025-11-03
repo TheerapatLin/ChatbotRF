@@ -36,7 +36,9 @@
       "Bash(nul)",
       "Bash(cat:*)",
       "Bash(tree:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(.\\chatbot.exe)",
+      "Bash(./chatbot.exe)"
     ],
     "deny": [],
     "ask": []

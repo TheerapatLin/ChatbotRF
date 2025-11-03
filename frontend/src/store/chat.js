@@ -76,13 +76,14 @@ export const useChatStore = defineStore('chat', {
     },
 
     // Upload ไฟล์
-    async uploadFiles(files, analysisType = 'summary') {
+    async uploadFiles(files, analysisType = 'summary', prompt = '') {
       const uploadPromises = files.map(async (file) => {
         try {
           const result = await fileService.analyzeFile(file, {
             sessionId: this.sessionId,
             analysisType,
-            language: 'th'
+            language: 'th',
+            prompt // ส่ง prompt ไปด้วย
           })
 
           // Response ตอนนี้เป็นรูปแบบเดียวกับ ChatResponse
@@ -104,7 +105,8 @@ export const useChatStore = defineStore('chat', {
         }
       })
 
-      await Promise.all(uploadPromises)
+      const results = await Promise.all(uploadPromises)
+      return results // Return results เพื่อให้ MessageInput.vue สามารถใช้งานได้
     },
 
     addMessage(message) {

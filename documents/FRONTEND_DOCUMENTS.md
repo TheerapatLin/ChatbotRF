@@ -36,8 +36,8 @@
 ### Port & URL
 
 - **Dev Server**: `http://localhost:5173`
-- **API**: `http://localhost:3000/api`
-- **WebSocket**: `ws://localhost:3000/api/chat/stream`
+- **API**: `http://localhost:3001/api`
+- **WebSocket**: `ws://localhost:3001/api/chat/stream`
 
 ---
 
@@ -434,8 +434,8 @@ npm run preview
 สร้างไฟล์ `.env` หรือ `.env.development`:
 
 ```env
-VITE_API_BASE_URL=http://localhost:3000/api
-VITE_WS_URL=ws://localhost:3000/api/chat/stream
+VITE_API_BASE_URL=http://localhost:3001/api
+VITE_WS_URL=ws://localhost:3001/api/chat/stream
 ```
 
 ### Constants (`src/config/constants.js`)
@@ -534,4 +534,4 @@ DEFAULT_PERSONA_ID = 1         // บุคลิกเริ่มต้น
 ---
 
 **Frontend URL**: `http://localhost:5173`
-**Backend API**: `http://localhost:3000/api`
+**Backend API**: `http://localhost:3001/api`

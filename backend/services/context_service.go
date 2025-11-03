@@ -26,23 +26,11 @@ func NewContextService(
 	}
 }
 
-// BuildContextWithHistory builds OpenAI messages array with conversation history (existing method)
+// BuildContextWithHistory builds OpenAI messages array with conversation history
 func (s *ContextService) BuildContextWithHistory(
 	sessionID string,
 	systemPrompt string,
 	currentMessage string,
-	historyLimit int,
-) ([]openai.ChatCompletionMessage, error) {
-	// Call the new method with empty file IDs
-	return s.BuildContextWithFiles(sessionID, systemPrompt, currentMessage, []string{}, historyLimit)
-}
-
-// BuildContextWithFiles builds OpenAI messages with file context
-func (s *ContextService) BuildContextWithFiles(
-	sessionID string,
-	systemPrompt string,
-	userMessage string,
-	fileIDs []string,
 	historyLimit int,
 ) ([]openai.ChatCompletionMessage, error) {
 
@@ -56,20 +44,7 @@ func (s *ContextService) BuildContextWithFiles(
 		})
 	}
 
-	// 2. Build and add file context if files are provided
-	if len(fileIDs) > 0 {
-		fileContext, err := s.buildFileContext(fileIDs)
-		if err != nil {
-			fmt.Printf("⚠️  Warning: Failed to build file context: %v\n", err)
-		} else if fileContext != "" {
-			messages = append(messages, openai.ChatCompletionMessage{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: fileContext,
-			})
-		}
-	}
-
-	// 3. Add conversation history
+	// 2. Add conversation history
 	if sessionID != "" && historyLimit > 0 {
 		history, err := s.messageRepo.GetRecentBySession(sessionID, historyLimit)
 		if err == nil && len(history) > 0 {
@@ -79,34 +54,25 @@ func (s *ContextService) BuildContextWithFiles(
 					role = openai.ChatMessageRoleAssistant
 				}
 
-				content := msg.Content
-
-				// If message has file attachments, add file info to content
-				if msg.HasFileAttachments() {
-					attachments, _ := msg.GetFileAttachments()
-					fileInfo := s.formatFileAttachmentsInfo(attachments)
-					content = content + "\n\n" + fileInfo
-				}
-
 				messages = append(messages, openai.ChatCompletionMessage{
 					Role:    role,
-					Content: content,
+					Content: msg.Content,
 				})
 			}
 		}
 	}
 
-	// 4. Add current user message
+	// 3. Add current user message
 	messages = append(messages, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleUser,
-		Content: userMessage,
+		Content: currentMessage,
 	})
 
 	return messages, nil
 }
 
-// buildFileContext fetches file analysis and builds context string
-func (s *ContextService) buildFileContext(fileIDs []string) (string, error) {
+// BuildFileContext builds file context string from file IDs (for current message only)
+func (s *ContextService) BuildFileContext(fileIDs []string) (string, error) {
 	if len(fileIDs) == 0 {
 		return "", nil
 	}
@@ -149,25 +115,6 @@ func (s *ContextService) buildFileContext(fileIDs []string) (string, error) {
 			"Provide insights based on the file content and analysis.")
 
 	return strings.Join(contextParts, "\n"), nil
-}
-
-// formatFileAttachmentsInfo formats file attachment info for conversation history
-func (s *ContextService) formatFileAttachmentsInfo(attachments []models.FileAttachment) string {
-	if len(attachments) == 0 {
-		return ""
-	}
-
-	parts := []string{"[📎 Attached files:"}
-	for _, att := range attachments {
-		parts = append(parts,
-			fmt.Sprintf("  • %s (%s, %s)",
-				att.Filename,
-				att.FileType,
-				formatFileSize(att.FileSize)))
-	}
-	parts = append(parts, "]")
-
-	return strings.Join(parts, "\n")
 }
 
 // formatFileSize formats bytes to human-readable size

@@ -75,21 +75,21 @@ export function useWebSocket() {
     let message
     if (typeof payload === 'string') {
       message = {
-        type: 'message',                              // ✅ เพิ่ม type
-        content: payload,                             // ✅ เปลี่ยนจาก message → content
+        type: 'message',
+        content: payload,
         session_id: chatStore.sessionId,
         persona_id: chatStore.currentPersonaId || 1,
         system_prompt: chatStore.systemPrompt || '',
-        file_ids: fileIds                             // ✅ เพิ่ม file_ids
+        file_ids: fileIds
       }
     } else {
       message = {
-        type: 'message',                              // ✅ เพิ่ม type
-        content: payload.content,                     // ✅ เปลี่ยนจาก message → content
+        type: 'message',
+        content: payload.content,
         session_id: chatStore.sessionId,
         persona_id: payload.persona_id || chatStore.currentPersonaId || 1,
         system_prompt: payload.system_prompt || chatStore.systemPrompt || '',
-        file_ids: payload.file_ids || fileIds         // ✅ เพิ่ม file_ids
+        file_ids: payload.file_ids || fileIds
       }
     }
 

@@ -76,52 +76,81 @@ const handleFilesSelected = (files) => {
 const sendMessage = async () => {
   if (!canSend.value || isStreaming.value) return
 
-  // อัปโหลดไฟล์ก่อน (ถ้ามี)
-  if (selectedFiles.value.length > 0) {
+  const hasFiles = selectedFiles.value.length > 0
+  const userMessageText = message.value.trim() || (hasFiles ? '(แนบไฟล์)' : '')
+
+  // Case 1: มีไฟล์แนบ → ใช้ /api/file/analyze
+  if (hasFiles) {
     isUploading.value = true
+
     try {
-      await chatStore.uploadFiles(selectedFiles.value, 'summary')
+      // อัปโหลดและวิเคราะห์ไฟล์
+      const results = await chatStore.uploadFiles(selectedFiles.value, 'summary', userMessageText)
+
+      // Build user message with file attachments
+      const userMessage = {
+        role: 'user',
+        content: userMessageText,
+        created_at: new Date().toISOString(),
+        file_attachments: chatStore.uploadedFiles.map(file => ({
+          file_id: file.fileId,
+          filename: file.filename,
+          file_type: file.fileType,
+          file_size: file.fileSize
+        }))
+      }
+
+      chatStore.addMessage(userMessage)
+
+      // เพิ่ม AI response จาก file analysis
+      if (results && results.length > 0) {
+        const analysisResult = results[0] // ใช้ผลจากไฟล์แรก
+        const aiMessage = {
+          role: 'assistant',
+          content: analysisResult.reply || analysisResult.analysis || 'วิเคราะห์ไฟล์เสร็จสิ้น',
+          created_at: new Date().toISOString(),
+          tokens_used: analysisResult.tokens_used || 0
+        }
+        chatStore.addMessage(aiMessage)
+      }
+
+      isUploading.value = false
+
+      // Clear uploaded files from store
+      chatStore.clearUploadedFiles()
     } catch (error) {
       console.error('Failed to upload files:', error)
       isUploading.value = false
       return
     }
-    isUploading.value = false
   }
-
-  // Build user message with file attachments
-  const userMessage = {
-    role: 'user',
-    content: message.value || '(แนบไฟล์)',
-    created_at: new Date().toISOString(),
-    file_attachments: chatStore.uploadedFiles.map(file => ({
-      file_id: file.fileId,
-      filename: file.filename,
-      file_type: file.fileType,
-      file_size: file.fileSize
-    }))
-  }
-
-  chatStore.addMessage(userMessage)
-
-  // Send via WebSocket
-  if (wsConnection && wsConnection.sendMessage) {
-    chatStore.startStreaming()
-    const messagePayload = {
-      content: message.value || 'วิเคราะห์ไฟล์ที่แนบมา',
-      persona_id: chatStore.currentPersonaId,
-      system_prompt: chatStore.systemPrompt || ''
+  // Case 2: ไม่มีไฟล์ → ใช้ WebSocket (streaming)
+  else {
+    const userMessage = {
+      role: 'user',
+      content: userMessageText,
+      created_at: new Date().toISOString()
     }
-    wsConnection.sendMessage(messagePayload)
-  } else {
-    console.error('WebSocket not connected')
+
+    chatStore.addMessage(userMessage)
+
+    // Send via WebSocket
+    if (wsConnection && wsConnection.sendMessage) {
+      chatStore.startStreaming()
+      const messagePayload = {
+        content: userMessageText,
+        persona_id: chatStore.currentPersonaId,
+        system_prompt: chatStore.systemPrompt || ''
+      }
+      wsConnection.sendMessage(messagePayload)
+    } else {
+      console.error('WebSocket not connected')
+    }
   }
 
+  // Reset form
   message.value = ''
   selectedFiles.value = []
-
-  // Clear uploaded files from store
-  chatStore.clearUploadedFiles()
 
   // Clear file upload component
   if (fileUploadRef.value) {

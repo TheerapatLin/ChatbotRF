@@ -1,7 +1,7 @@
 # ChatBot API Documentation
 
-**Base URL**: `http://localhost:3000/api`
-**WebSocket**: `ws://localhost:3000/api/chat/stream`
+**Base URL**: `http://localhost:3001/api`
+**WebSocket**: `ws://localhost:3001/api/chat/stream`
 **Version**: 2.1.0
 **Last Updated**: 2025-11-02
 
@@ -21,18 +21,18 @@
 
 ```bash
 # Health check
-curl http://localhost:3000/api/health
+curl http://localhost:3001/api/health
 
 # List personas
-curl http://localhost:3000/api/personas
+curl http://localhost:3001/api/personas
 
 # Send chat message
-curl -X POST http://localhost:3000/api/chat \
+curl -X POST http://localhost:3001/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "สวัสดี", "session_id": "test_001"}'
 
 # Analyze file
-curl -X POST http://localhost:3000/api/file/analyze \
+curl -X POST http://localhost:3001/api/file/analyze \
   -F "file=@document.pdf" \
   -F "session_id=test_001" \
   -F "prompt=สรุปเอกสารนี้"

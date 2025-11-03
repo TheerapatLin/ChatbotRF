@@ -48,7 +48,7 @@ type ChatRequest struct {
 	MaxTokens    int      `json:"max_tokens,omitempty"`
 	Model        string   `json:"model,omitempty"`
 	UseHistory   bool     `json:"use_history,omitempty"`
-	FileIDs      []string `json:"file_ids,omitempty"` // Array of file analysis UUIDs to attach
+	FileIDs      []string `json:"file_ids,omitempty"` // File IDs for current message only
 }
 
 // PersonaInfo contains persona information in response
@@ -128,11 +128,6 @@ func (ctrl *ChatController) parseRequest(c *fiber.Ctx) (*ChatRequest, error) {
 		return nil, utils.BadRequest(c, "Message is required")
 	}
 
-	// Validate file_ids limit (max 5 files per message)
-	if len(req.FileIDs) > 5 {
-		return nil, utils.BadRequest(c, "Maximum 5 files allowed per message")
-	}
-
 	return &req, nil
 }
 
@@ -171,28 +166,14 @@ func (ctrl *ChatController) getOrGenerateSessionID(req *ChatRequest) string {
 	return fmt.Sprintf("session_%d", time.Now().UnixNano())
 }
 
-// buildMessages builds OpenAI messages array with optional history and files
+// buildMessages builds OpenAI messages array with optional history and current files
 func (ctrl *ChatController) buildMessages(req *ChatRequest, sessionID, systemPrompt string) ([]openai.ChatCompletionMessage, int) {
 	historyCount := 0
 
-	// Auto-load files from session if not explicitly provided
-	fileIDs := req.FileIDs
-	if len(fileIDs) == 0 && sessionID != "" {
-		// Try to load recent files from this session
-		sessionFiles, err := ctrl.fileAnalysisRepo.GetRecentBySessionID(sessionID, 5)
-		if err == nil && len(sessionFiles) > 0 {
-			fileIDs = make([]string, len(sessionFiles))
-			for i, f := range sessionFiles {
-				fileIDs[i] = f.ID.String()
-			}
-			fmt.Printf("🔗 Auto-loaded %d files from session %s\n", len(fileIDs), sessionID)
-		}
-	}
-
-	// Build context with history and files if enabled
+	// Build context with history if enabled
 	if req.UseHistory && sessionID != "" {
-		messages, err := ctrl.contextService.BuildContextWithFiles(
-			sessionID, systemPrompt, req.Message, fileIDs, 10,
+		messages, err := ctrl.contextService.BuildContextWithHistory(
+			sessionID, systemPrompt, req.Message, 10,
 		)
 		if err != nil {
 			fmt.Printf("⚠️  Failed to build context with history: %v\n", err)
@@ -201,18 +182,54 @@ func (ctrl *ChatController) buildMessages(req *ChatRequest, sessionID, systemPro
 			if systemPrompt != "" {
 				historyCount--
 			}
-			// Also subtract file context message if files are provided
-			if len(fileIDs) > 0 {
-				historyCount--
+
+			// Add file context for current message if files provided
+			if len(req.FileIDs) > 0 {
+				fileContext, err := ctrl.contextService.BuildFileContext(req.FileIDs)
+				if err == nil && fileContext != "" {
+					// Insert file context before the last user message
+					messages = append(
+						messages[:len(messages)-1],
+						openai.ChatCompletionMessage{
+							Role:    openai.ChatMessageRoleSystem,
+							Content: fileContext,
+						},
+						messages[len(messages)-1],
+					)
+				}
 			}
+
 			return messages, historyCount
 		}
 	}
 
-	// Fallback: simple message without history
-	return []openai.ChatCompletionMessage{
-		{Role: openai.ChatMessageRoleUser, Content: req.Message},
-	}, 0
+	// Fallback: simple message with optional file context
+	messages := []openai.ChatCompletionMessage{}
+
+	if systemPrompt != "" {
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: systemPrompt,
+		})
+	}
+
+	// Add file context if files provided
+	if len(req.FileIDs) > 0 {
+		fileContext, err := ctrl.contextService.BuildFileContext(req.FileIDs)
+		if err == nil && fileContext != "" {
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: fileContext,
+			})
+		}
+	}
+
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleUser,
+		Content: req.Message,
+	})
+
+	return messages, 0
 }
 
 // callOpenAI sends request to OpenAI API
@@ -251,18 +268,6 @@ func (ctrl *ChatController) saveMessages(req *ChatRequest, sessionID string, ope
 		PersonaID: req.PersonaID,
 	}
 
-	// Add file attachments if provided
-	if len(req.FileIDs) > 0 {
-		attachments, err := ctrl.buildFileAttachments(req.FileIDs)
-		if err != nil {
-			fmt.Printf("⚠️  Warning: Failed to build file attachments: %v\n", err)
-		} else if len(attachments) > 0 {
-			if err := userMessage.SetFileAttachments(attachments); err != nil {
-				fmt.Printf("⚠️  Warning: Failed to set file attachments: %v\n", err)
-			}
-		}
-	}
-
 	if err := ctrl.messageRepo.Create(userMessage); err != nil {
 		return err
 	}
@@ -277,28 +282,6 @@ func (ctrl *ChatController) saveMessages(req *ChatRequest, sessionID string, ope
 		TokensUsed: &tokensUsed,
 	}
 	return ctrl.messageRepo.Create(assistantMessage)
-}
-
-// buildFileAttachments fetches file analysis and builds FileAttachment array
-func (ctrl *ChatController) buildFileAttachments(fileIDs []string) ([]models.FileAttachment, error) {
-	attachments := make([]models.FileAttachment, 0, len(fileIDs))
-
-	for _, fileID := range fileIDs {
-		analysis, err := ctrl.fileAnalysisRepo.FindByID(fileID)
-		if err != nil {
-			fmt.Printf("⚠️  Warning: File not found for ID %s: %v\n", fileID, err)
-			continue
-		}
-
-		attachments = append(attachments, models.FileAttachment{
-			FileID:   fileID,
-			Filename: analysis.FileName,
-			FileType: analysis.FileType,
-			FileSize: analysis.FileSize,
-		})
-	}
-
-	return attachments, nil
 }
 
 // buildResponse builds the final chat response

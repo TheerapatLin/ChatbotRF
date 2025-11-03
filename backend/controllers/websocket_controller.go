@@ -46,7 +46,7 @@ type WSMessage struct {
 	PersonaID    *int     `json:"persona_id"`    // Persona ID
 	SystemPrompt string   `json:"system_prompt"` // Optional custom system prompt
 	SessionID    string   `json:"session_id"`    // Session ID for conversation history
-	FileIDs      []string `json:"file_ids"`      // Array of file analysis UUIDs to attach
+	FileIDs      []string `json:"file_ids"`      // File IDs for current message only
 }
 
 // WSResponse represents outgoing WebSocket messages
@@ -104,11 +104,6 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 		return fmt.Errorf("content is required")
 	}
 
-	// Validate file_ids limit (max 5 files per message)
-	if len(msg.FileIDs) > 5 {
-		return fmt.Errorf("maximum 5 files allowed per message")
-	}
-
 	// 2. Get persona if persona_id provided (default to 1 if not specified)
 	personaID := 1
 	if msg.PersonaID != nil {
@@ -128,15 +123,14 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 		systemPrompt = persona.SystemPrompt + "\n\nAdditional instructions: " + msg.SystemPrompt
 	}
 
-	// 4. Build context with history and files if session_id provided
+	// 4. Build context with history if session_id provided
 	var messages []openai.ChatCompletionMessage
 	if msg.SessionID != "" {
-		// Use context service to build messages with history and files
-		messages, err = ctrl.contextService.BuildContextWithFiles(
+		// Use context service to build messages with history
+		messages, err = ctrl.contextService.BuildContextWithHistory(
 			msg.SessionID,
 			systemPrompt,
 			msg.Content,
-			msg.FileIDs,
 			10, // history limit
 		)
 		if err != nil {
@@ -147,11 +141,42 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 				{Role: openai.ChatMessageRoleUser, Content: msg.Content},
 			}
 		}
+
+		// Add file context for current message if files provided
+		if len(msg.FileIDs) > 0 {
+			fileContext, err := ctrl.contextService.BuildFileContext(msg.FileIDs)
+			if err == nil && fileContext != "" {
+				// Insert file context before the last user message
+				messages = append(
+					messages[:len(messages)-1],
+					openai.ChatCompletionMessage{
+						Role:    openai.ChatMessageRoleSystem,
+						Content: fileContext,
+					},
+					messages[len(messages)-1],
+				)
+			}
+		}
 	} else {
 		// No session - simple messages without history
 		messages = []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
 			{Role: openai.ChatMessageRoleUser, Content: msg.Content},
+		}
+
+		// Add file context if files provided
+		if len(msg.FileIDs) > 0 {
+			fileContext, err := ctrl.contextService.BuildFileContext(msg.FileIDs)
+			if err == nil && fileContext != "" {
+				messages = append(
+					messages[:len(messages)-1],
+					openai.ChatCompletionMessage{
+						Role:    openai.ChatMessageRoleSystem,
+						Content: fileContext,
+					},
+					messages[len(messages)-1],
+				)
+			}
 		}
 	}
 
@@ -203,18 +228,6 @@ streamDone:
 		Role:      models.RoleUser,
 		Content:   msg.Content,
 		PersonaID: &personaID,
-	}
-
-	// Add file attachments if provided
-	if len(msg.FileIDs) > 0 {
-		attachments, err := ctrl.buildFileAttachments(msg.FileIDs)
-		if err != nil {
-			log.Printf("⚠️  Warning: Failed to build file attachments: %v", err)
-		} else if len(attachments) > 0 {
-			if err := userMessage.SetFileAttachments(attachments); err != nil {
-				log.Printf("⚠️  Warning: Failed to set file attachments: %v", err)
-			}
-		}
 	}
 
 	if err := ctrl.messageRepo.Create(userMessage); err != nil {
@@ -272,26 +285,4 @@ func (ctrl *WebSocketController) sendError(c *websocket.Conn, errorMsg string) e
 		"type":  "error",
 		"error": errorMsg,
 	})
-}
-
-// buildFileAttachments fetches file analysis and builds FileAttachment array
-func (ctrl *WebSocketController) buildFileAttachments(fileIDs []string) ([]models.FileAttachment, error) {
-	attachments := make([]models.FileAttachment, 0, len(fileIDs))
-
-	for _, fileID := range fileIDs {
-		analysis, err := ctrl.fileAnalysisRepo.FindByID(fileID)
-		if err != nil {
-			log.Printf("⚠️  Warning: File not found for ID %s: %v", fileID, err)
-			continue
-		}
-
-		attachments = append(attachments, models.FileAttachment{
-			FileID:   fileID,
-			Filename: analysis.FileName,
-			FileType: analysis.FileType,
-			FileSize: analysis.FileSize,
-		})
-	}
-
-	return attachments, nil
 }
