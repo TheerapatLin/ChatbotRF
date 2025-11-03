@@ -123,10 +123,27 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 		systemPrompt = persona.SystemPrompt + "\n\nAdditional instructions: " + msg.SystemPrompt
 	}
 
-	// 4. Build context with history if session_id provided
+	// 4. Build context with history and files
 	var messages []openai.ChatCompletionMessage
-	if msg.SessionID != "" {
-		// Use context service to build messages with history
+	if len(msg.FileIDs) > 0 {
+		// Use new function that supports images
+		messages, err = ctrl.contextService.BuildContextWithHistoryAndFiles(
+			msg.SessionID,
+			systemPrompt,
+			msg.Content,
+			10, // history limit
+			msg.FileIDs,
+		)
+		if err != nil {
+			log.Printf("⚠️  Failed to build context with files: %v", err)
+			// Fallback to simple messages
+			messages = []openai.ChatCompletionMessage{
+				{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
+				{Role: openai.ChatMessageRoleUser, Content: msg.Content},
+			}
+		}
+	} else if msg.SessionID != "" {
+		// Use context service to build messages with history only
 		messages, err = ctrl.contextService.BuildContextWithHistory(
 			msg.SessionID,
 			systemPrompt,
@@ -141,44 +158,15 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 				{Role: openai.ChatMessageRoleUser, Content: msg.Content},
 			}
 		}
-
-		// Add file context for current message if files provided
-		if len(msg.FileIDs) > 0 {
-			fileContext, err := ctrl.contextService.BuildFileContext(msg.FileIDs)
-			if err == nil && fileContext != "" {
-				// Insert file context before the last user message
-				messages = append(
-					messages[:len(messages)-1],
-					openai.ChatCompletionMessage{
-						Role:    openai.ChatMessageRoleSystem,
-						Content: fileContext,
-					},
-					messages[len(messages)-1],
-				)
-			}
-		}
 	} else {
-		// No session - simple messages without history
+		// No session and no files - simple messages
 		messages = []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
 			{Role: openai.ChatMessageRoleUser, Content: msg.Content},
 		}
-
-		// Add file context if files provided
-		if len(msg.FileIDs) > 0 {
-			fileContext, err := ctrl.contextService.BuildFileContext(msg.FileIDs)
-			if err == nil && fileContext != "" {
-				messages = append(
-					messages[:len(messages)-1],
-					openai.ChatCompletionMessage{
-						Role:    openai.ChatMessageRoleSystem,
-						Content: fileContext,
-					},
-					messages[len(messages)-1],
-				)
-			}
-		}
 	}
+
+	fmt.Println(`messages => `, messages)
 
 	// 5. Call OpenAI streaming API
 	stream, err := ctrl.openaiService.CreateStreamingChatCompletion(ctx, messages)

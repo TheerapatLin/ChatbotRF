@@ -24,14 +24,19 @@ func NewPersonaController(personaRepo *repositories.PersonaRepository, messageRe
 
 // PersonaResponse represents a persona in API response
 type PersonaResponse struct {
-	ID           int       `json:"id"`
-	Name         string    `json:"name"`
-	SystemPrompt string    `json:"system_prompt"`
-	Expertise    string    `json:"expertise"`
-	Description  string    `json:"description"`
-	Icon         string    `json:"icon"`
-	IsActive     bool      `json:"is_active"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID              int     `json:"id"`
+	Name            string  `json:"name"`
+	Description     string  `json:"description"`
+	Tone            string  `json:"tone"`
+	Style           string  `json:"style"`
+	Expertise       string  `json:"expertise"`
+	Temperature     float32 `json:"temperature"`
+	MaxTokens       int     `json:"max_tokens"`
+	Model           string  `json:"model"`
+	LanguageSetting string  `json:"language_setting"`
+	Guardrails      string  `json:"guardrails"`
+	Icon            string  `json:"icon"`
+	IsActive        bool    `json:"is_active"`
 }
 
 // PersonasListResponse represents the list of personas response
@@ -72,14 +77,19 @@ func (ctrl *PersonaController) GetAllPersonas(c *fiber.Ctx) error {
 	personaResponses := make([]PersonaResponse, len(personas))
 	for i, persona := range personas {
 		personaResponses[i] = PersonaResponse{
-			ID:           persona.ID,
-			Name:         persona.Name,
-			SystemPrompt: persona.SystemPrompt,
-			Expertise:    persona.Expertise,
-			Description:  persona.Description,
-			Icon:         persona.Icon,
-			IsActive:     persona.IsActive,
-			CreatedAt:    persona.CreatedAt,
+			ID:              persona.ID,
+			Name:            persona.Name,
+			Description:     persona.Description,
+			Tone:            persona.Tone,
+			Style:           persona.Style,
+			Expertise:       persona.Expertise,
+			Temperature:     persona.Temperature,
+			MaxTokens:       persona.MaxTokens,
+			Model:           persona.Model,
+			LanguageSetting: persona.LanguageSetting,
+			Guardrails:      persona.Guardrails,
+			Icon:            persona.Icon,
+			IsActive:        persona.IsActive,
 		}
 	}
 
