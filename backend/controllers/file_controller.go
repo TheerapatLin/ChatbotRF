@@ -4,7 +4,6 @@ import (
 	"chatbot/models"
 	"chatbot/repositories"
 	"chatbot/services"
-	"chatbot/utils"
 	"fmt"
 	"log"
 	"mime/multipart"
@@ -101,7 +100,7 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 		},
 	}
 
-	return utils.SuccessJSON(c, response)
+	return c.Status(fiber.StatusOK).JSON(response)
 }
 
 // parseFileRequest parses and validates file upload request
@@ -109,7 +108,9 @@ func (ctrl *FileController) parseFileRequest(c *fiber.Ctx) (*multipart.FileHeade
 	// Get file from multipart form
 	file, err := c.FormFile("file")
 	if err != nil {
-		return nil, "", "", "", "", "", false, utils.BadRequest(c, "file is required")
+		return nil, "", "", "", "", "", false, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "file is required",
+		})
 	}
 
 	// Get session_id (optional)
@@ -131,7 +132,9 @@ func (ctrl *FileController) parseFileRequest(c *fiber.Ctx) (*multipart.FileHeade
 		}
 	}
 	if !isValid {
-		return nil, "", "", "", "", "", false, utils.BadRequest(c, "invalid analysis_type. Allowed: summary, detail, qa, extract")
+		return nil, "", "", "", "", "", false, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid analysis_type. Allowed: summary, detail, qa, extract",
+		})
 	}
 
 	// Get optional parameters
@@ -155,7 +158,9 @@ func (ctrl *FileController) analyzeImageFile(c *fiber.Ctx, file *multipart.FileH
 	// Open file
 	fileData, err := file.Open()
 	if err != nil {
-		return utils.InternalError(c, "failed to open file")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to open file",
+		})
 	}
 	defer fileData.Close()
 
@@ -165,7 +170,9 @@ func (ctrl *FileController) analyzeImageFile(c *fiber.Ctx, file *multipart.FileH
 	// Analyze image (pass systemPrompt to service if needed)
 	analysis, err := ctrl.fileService.AnalyzeImage(c.Context(), fileData, file.Filename, prompt, systemPrompt)
 	if err != nil {
-		return utils.InternalError(c, fmt.Sprintf("failed to analyze image: %v", err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to analyze image: %v", err),
+		})
 	}
 
 	// Build internal response for saving
@@ -211,7 +218,7 @@ func (ctrl *FileController) analyzeImageFile(c *fiber.Ctx, file *multipart.FileH
 		},
 	}
 
-	return utils.SuccessJSON(c, response)
+	return c.Status(fiber.StatusOK).JSON(response)
 }
 
 // handleAnalysisError maps service errors to appropriate HTTP status codes
@@ -236,7 +243,9 @@ func (ctrl *FileController) handleAnalysisError(c *fiber.Ctx, err error) error {
 		})
 	}
 
-	return utils.InternalError(c, fmt.Sprintf("failed to analyze file: %v", err))
+	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+		"error": fmt.Sprintf("failed to analyze file: %v", err),
+	})
 }
 
 // saveFileAnalysis saves analysis result to database
@@ -276,12 +285,20 @@ func (ctrl *FileController) saveFileAnalysis(result *services.FileAnalysisRespon
 
 // GetFileHistory handles GET /api/file/history endpoint
 func (ctrl *FileController) GetFileHistory(c *fiber.Ctx) error {
+	// Parse and validate pagination
+	limit := c.QueryInt("limit", 20)
+	offset := c.QueryInt("offset", 0)
+
 	// Validate pagination
-	limit, offset := utils.ValidatePagination(
-		c.QueryInt("limit", 20),
-		c.QueryInt("offset", 0),
-		100, // max limit
-	)
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
 
 	fileType := c.Query("file_type", "all")
 
@@ -289,12 +306,14 @@ func (ctrl *FileController) GetFileHistory(c *fiber.Ctx) error {
 	files, total, err := ctrl.getFilesByType(fileType, limit, offset)
 	if err != nil {
 		log.Printf("Failed to fetch file history: %v", err)
-		return utils.InternalError(c, "failed to fetch file history")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch file history",
+		})
 	}
 
 	// Build and return response
 	response := ctrl.buildFileHistoryResponse(files, total, limit, offset)
-	return utils.SuccessJSON(c, response)
+	return c.Status(fiber.StatusOK).JSON(response)
 }
 
 // getFilesByType retrieves files based on file type filter
@@ -334,7 +353,9 @@ func (ctrl *FileController) buildFileHistoryResponse(files []models.FileAnalysis
 func (ctrl *FileController) ReanalyzeFile(c *fiber.Ctx) error {
 	fileID := c.Params("file_id")
 	if fileID == "" {
-		return utils.BadRequest(c, "file_id is required")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "file_id is required",
+		})
 	}
 
 	// TODO: Implement re-analysis from stored files

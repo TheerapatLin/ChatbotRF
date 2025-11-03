@@ -1,67 +1,106 @@
 # ChatBot API Documentation
 
-**Base URL**: `http://localhost:3001/api`
-**WebSocket**: `ws://localhost:3001/api/chat/stream`
-**Version**: 2.1.0
-**Last Updated**: 2025-11-02
+## โครงสร้างโปรเจ็ค
 
----
-
-## 📋 Table of Contents
-
-1. [Quick Start](#quick-start)
-2. [API Endpoints](#api-endpoints)
-3. [Data Models](#data-models)
-4. [Error Handling](#error-handling)
-5. [Best Practices](#best-practices)
-
----
-
-## 🚀 Quick Start
-
-```bash
-# Health check
-curl http://localhost:3001/api/health
-
-# List personas
-curl http://localhost:3001/api/personas
-
-# Send chat message
-curl -X POST http://localhost:3001/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "สวัสดี", "session_id": "test_001"}'
-
-# Analyze file
-curl -X POST http://localhost:3001/api/file/analyze \
-  -F "file=@document.pdf" \
-  -F "session_id=test_001" \
-  -F "prompt=สรุปเอกสารนี้"
+```
+backend/
+├── config/              # การตั้งค่า
+│   ├── config.go        # โหลด environment variables
+│   └── database.go      # เชื่อมต่อ PostgreSQL
+├── controllers/         # จัดการ HTTP requests
+│   ├── audio_controller.go
+│   ├── chat_controller.go
+│   ├── file_controller.go
+│   ├── persona_controller.go
+│   └── websocket_controller.go
+├── middleware/          # HTTP middleware
+│   └── logger.go
+├── models/              # โครงสร้างข้อมูล Database
+│   ├── file_analysis.go
+│   ├── message.go
+│   └── persona.go
+├── repositories/        # เข้าถึงข้อมูล Database
+│   ├── file_analysis_repository.go
+│   ├── message_repository.go
+│   └── persona_repository.go
+├── routes/              # กำหนดเส้นทาง API
+│   └── routes.go
+├── services/            # Business logic
+│   ├── context_service.go    # สร้าง context สำหรับ AI
+│   ├── file_service.go       # วิเคราะห์ไฟล์
+│   ├── openai_service.go     # เชื่อมต่อ OpenAI API
+│   ├── tts_service.go        # Text-to-Speech
+│   └── whisper_service.go    # Speech-to-Text
+├── main.go              # Entry point
+├── .env.development     # ตั้งค่า Environment
+└── go.mod               # Go dependencies
 ```
 
+**Architecture Pattern:** Repository-Service-Controller
+- **Repository:** เข้าถึงข้อมูลจาก Database
+- **Service:** Business logic และการเชื่อมต่อ External APIs
+- **Controller:** รับ HTTP request และส่ง response
+
 ---
 
-## 📡 API Endpoints
+## วิธีเริ่ม Server
 
-### 1. Health Check
+### 1. ติดตั้ง Dependencies
+```bash
+cd backend
+go mod download
+```
 
-#### `GET /health`
-ตรวจสอบสถานะ API
+### 2. เริ่ม Database (PostgreSQL)
+```bash
+docker-compose up -d
+```
+
+### 3. ตั้งค่า Environment Variables
+แก้ไขไฟล์ `.env.development`:
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+PORT=3001
+DATABASE_URL=postgres://chatbot_user:admin123@localhost:5432/chatbot_db?sslmode=disable
+```
+
+### 4. รัน Server
+```bash
+# รันแบบปกติ
+go run main.go
+
+# รันแบบ Hot Reload (สำหรับ Development)
+air
+```
+
+Server จะเปิดที่: `http://localhost:3001`
+
+---
+
+## API Endpoints
+
+### Health Check
+**GET** `/api/health`
+
+ตรวจสอบสถานะของ API
 
 **Response:**
 ```json
 {
-  "status": "ok",
-  "message": "ChatBot API is running",
-  "env": "development"
+  "status": "healthy",
+  "environment": "development",
+  "timestamp": "2025-11-03T19:00:00Z"
 }
 ```
 
 ---
 
-### 2. Personas (บุคลิก AI)
+## 1. Personas API
 
-#### `GET /personas`
-ดึงรายการบุคลิก AI ทั้งหมด
+### 1.1 ดึงรายการ Personas ทั้งหมด
+**GET** `/api/personas`
+
+ดึงรายการ AI personas ที่ active ทั้งหมด
 
 **Response:**
 ```json
@@ -69,570 +108,701 @@ curl -X POST http://localhost:3001/api/file/analyze \
   "personas": [
     {
       "id": 1,
-      "name": "General Assistant",
-      "system_prompt": "You are a helpful assistant...",
-      "expertise": "general",
-      "description": "ผู้ช่วย AI ทั่วไป",
+      "name": "ผู้ช่วยทั่วไป",
+      "system_prompt": "คุณคือผู้ช่วย AI ที่เป็นมิตร...",
+      "expertise": "ทั่วไป",
+      "description": "ผู้ช่วยอเนกประสงค์",
       "icon": "🤖",
       "is_active": true,
-      "created_at": "2024-01-15T10:30:00Z"
+      "created_at": "2025-11-03T19:00:00Z"
     }
   ]
 }
 ```
 
-#### `GET /personas/:id`
-ดึงรายละเอียดบุคลิกพร้อมสถิติ
+**วิธีทดสอบ:**
+```bash
+curl http://localhost:3001/api/personas
+```
+
+---
+
+### 1.2 ดึงข้อมูล Persona ตามไอดี
+**GET** `/api/personas/:id`
+
+ดึงข้อมูลละเอียดของ persona พร้อมสถิติ
 
 **Response:**
 ```json
 {
   "id": 1,
-  "name": "General Assistant",
+  "name": "ผู้ช่วยทั่วไป",
+  "system_prompt": "คุณคือผู้ช่วย AI...",
+  "expertise": "ทั่วไป",
+  "description": "ผู้ช่วยอเนกประสงค์",
+  "icon": "🤖",
+  "is_active": true,
+  "created_at": "2025-11-03T19:00:00Z",
   "stats": {
-    "total_messages": 42,
+    "total_messages": 150,
     "avg_response_time": "2.3s"
   }
 }
 ```
 
+**วิธีทดสอบ:**
+```bash
+curl http://localhost:3001/api/personas/1
+```
+
 ---
 
-### 3. Chat (แชท)
+## 2. Chat API
 
-#### `POST /chat`
-ส่งข้อความและรับคำตอบจาก AI
+### 2.1 ส่งข้อความแบบไม่ Streaming
+**POST** `/api/chat`
 
-**Request:**
+ส่งข้อความและรับคำตอบจาก AI (Non-streaming)
+
+**Request Body:**
 ```json
 {
-  "message": "อธิบาย Machine Learning",
+  "message": "สวัสดี บอกเกี่ยวกับตัวคุณหน่อย",
   "session_id": "session_123",
-  "persona_id": 2,
-  "system_prompt": "คุณเป็นครูสอน AI",
+  "persona_id": 1,
+  "system_prompt": "คุณคือผู้เชี่ยวชาญด้านการเงิน",
   "use_history": true,
-  "file_ids": ["uuid1", "uuid2"]
+  "max_tokens": 2000,
+  "temperature": 0.7,
+  "file_ids": ["file_uuid_123"]
 }
 ```
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `message` | string | ✅ | - | ข้อความ |
-| `session_id` | string | No | auto | Session ID |
-| `persona_id` | int | No | null | ID ของบุคลิก (1-3) |
-| `system_prompt` | string | No | "" | คำสั่งกำหนดพฤติกรรม AI |
-| `use_history` | bool | No | false | ใช้ประวัติการสนทนา |
-| `file_ids` | array | No | [] | UUID ของไฟล์ (สูงสุด 5 ไฟล์) |
+**Parameters:**
+- `message` (required): ข้อความจากผู้ใช้
+- `session_id` (optional): ID สำหรับเก็บ conversation history
+- `persona_id` (optional): ID ของ persona ที่ต้องการใช้
+- `system_prompt` (optional): Custom system prompt
+- `use_history` (optional): ใช้ประวัติการสนทนา (default: false)
+- `file_ids` (optional): Array ของ file IDs ที่ต้องการอ้างอิง
 
 **Response:**
 ```json
 {
-  "message_id": "uuid",
+  "message_id": "msg_uuid_123",
   "session_id": "session_123",
-  "reply": "Machine Learning คือ...",
+  "reply": "สวัสดีครับ ผมคือ AI ที่พร้อมช่วยเหลือคุณ...",
   "persona": {
-    "id": 2,
-    "name": "Technology Expert",
-    "icon": "💻"
+    "id": 1,
+    "name": "ผู้ช่วยทั่วไป",
+    "expertise": "ทั่วไป",
+    "icon": "🤖",
+    "description": "ผู้ช่วยอเนกประสงค์"
   },
-  "tokens_used": 145,
+  "tokens_used": 245,
   "model": "gpt-4o-mini",
-  "timestamp": "2024-11-02T12:30:00Z",
+  "timestamp": "2025-11-03T19:00:00Z",
   "history_used": true,
-  "history_count": 8
+  "history_count": 5
 }
 ```
 
-**หมายเหตุ:**
-- ส่งไฟล์ได้สูงสุด 5 ไฟล์ต่อข้อความ
-- ประวัติการสนทนา: 10 ข้อความล่าสุด
-- Backend จะดึงเนื้อหาไฟล์มารวมให้อัตโนมัติ
+**วิธีทดสอบ:**
+```bash
+curl -X POST http://localhost:3001/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "สวัสดี",
+    "session_id": "test_session",
+    "use_history": false
+  }'
+```
 
-#### `GET /chat/history`
-ดึงประวัติการสนทนา
+---
+
+### 2.2 ดึงประวัติการสนทนา
+**GET** `/api/chat/history?limit=50&offset=0`
+
+ดึงประวัติข้อความทั้งหมด พร้อม pagination
 
 **Query Parameters:**
-- `limit` (default: 50, max: 100)
-- `offset` (default: 0)
+- `limit` (optional): จำนวนข้อความต่อหน้า (default: 50, max: 100)
+- `offset` (optional): เริ่มที่ข้อความลำดับที่ (default: 0)
 
 **Response:**
 ```json
 {
   "messages": [
     {
-      "id": "uuid",
-      "session_id": "session_123",
+      "id": "msg_uuid_123",
       "role": "user",
       "content": "สวัสดี",
-      "file_attachments": [
-        {
-          "file_id": "uuid",
-          "filename": "doc.pdf",
-          "file_type": "application/pdf",
-          "file_size": 102400
-        }
-      ],
-      "created_at": "2024-11-02T12:00:00Z"
+      "persona_id": 1,
+      "created_at": "2025-11-03T19:00:00Z"
+    },
+    {
+      "id": "msg_uuid_124",
+      "role": "assistant",
+      "content": "สวัสดีครับ",
+      "persona_id": 1,
+      "created_at": "2025-11-03T19:00:01Z"
     }
   ],
-  "total": 247,
+  "total": 150,
   "limit": 50,
   "offset": 0
 }
 ```
 
+**วิธีทดสอบ:**
+```bash
+curl "http://localhost:3001/api/chat/history?limit=10&offset=0"
+```
+
 ---
 
-### 4. File Analysis (วิเคราะห์ไฟล์)
+### 2.3 Chat แบบ Streaming (WebSocket)
+**WebSocket** `/api/chat/stream`
 
-#### `POST /file/analyze`
-อัปโหลดและวิเคราะห์ไฟล์ด้วย AI
+เชื่อมต่อ WebSocket สำหรับรับคำตอบแบบ real-time streaming
+
+**ส่งข้อความ (WebSocket Message):**
+```json
+{
+  "type": "message",
+  "content": "เขียนเรื่องสั้นให้หน่อย",
+  "persona_id": 1,
+  "session_id": "session_123",
+  "system_prompt": "คุณคือนักเขียน",
+  "file_ids": ["file_uuid_123"]
+}
+```
+
+**รับข้อความ (WebSocket Response):**
+```json
+// Streaming chunks
+{
+  "type": "chunk",
+  "content": "กาลครั้งหนึ่ง",
+  "done": false
+}
+
+// Final message
+{
+  "type": "chunk",
+  "content": "",
+  "done": true,
+  "message_id": "msg_uuid_125",
+  "tokens_used": 320
+}
+```
+
+**วิธีทดสอบ (JavaScript):**
+```javascript
+const ws = new WebSocket('ws://localhost:3001/api/chat/stream');
+
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    type: 'message',
+    content: 'สวัสดี',
+    session_id: 'test_session'
+  }));
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log(data);
+};
+```
+
+---
+
+## 3. File Analysis API
+
+### 3.1 อัปโหลดและวิเคราะห์ไฟล์
+**POST** `/api/file/analyze`
+
+อัปโหลดไฟล์และให้ AI วิเคราะห์เนื้อหา
 
 **Content-Type:** `multipart/form-data`
 
-**Form Fields:**
+**Form Parameters:**
+- `file` (required): ไฟล์ที่ต้องการวิเคราะห์
+- `analysis_type` (optional): ประเภทการวิเคราะห์
+  - `summary` (default): สรุปเนื้อหา
+  - `detail`: วิเคราะห์ละเอียด
+  - `qa`: ถามตอบเกี่ยวกับไฟล์
+  - `extract`: ดึงข้อมูลสำคัญ
+- `prompt` (optional): คำสั่งเพิ่มเติม
+- `language` (optional): ภาษา `th` หรือ `en` (default: th)
+- `session_id` (optional): ID สำหรับเชื่อมโยงกับ conversation
+- `system_prompt` (optional): Custom system prompt
+- `use_history` (optional): ใช้ประวัติการสนทนา (default: false)
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `file` | file | ✅ | - | ไฟล์ที่ต้องการวิเคราะห์ |
-| `analysis_type` | string | No | summary | `summary`, `detail`, `qa`, `extract` |
-| `session_id` | string | No | null | เชื่อมกับการสนทนา |
-| `prompt` | string | No | "" | คำสั่งวิเคราะห์ |
-| `language` | string | No | th | `th` หรือ `en` |
-| `system_prompt` | string | No | "" | กำหนดพฤติกรรม AI |
-| `use_history` | bool | No | false | ใช้ประวัติการสนทนา |
-
-**Supported File Types:**
-
-| Type | Extensions | Max Size |
-|------|-----------|----------|
-| Text | .txt, .md | 10 MB |
-| PDF | .pdf | 25 MB |
-| Office | .docx, .xlsx, .pptx | 25 MB |
-| Images | .jpg, .png, .gif, .webp | 20 MB |
-| Code | .js, .py, .go, .java | 5 MB |
-| Data | .json, .xml, .csv | 10 MB |
-
-**Analysis Types:**
-- `summary` - สรุปย่อ
-- `detail` - วิเคราะห์แบบละเอียด พร้อมจุดสำคัญ
-- `qa` - รูปแบบคำถาม-คำตอบ
-- `extract` - ดึงข้อมูลสำคัญ (ชื่อ, วันที่, ตัวเลข)
+**รองรับไฟล์:**
+- เอกสาร: PDF, DOCX, XLSX, PPTX, TXT, MD, CSV, JSON, XML
+- รูปภาพ: JPG, PNG, GIF, WEBP
+- โค้ด: JS, PY, GO, JAVA
 
 **Response:**
 ```json
 {
-  "message_id": "uuid",
+  "message_id": "file_uuid_123",
   "session_id": "session_123",
-  "reply": "เอกสารนี้กล่าวถึงผลประกอบการรายไตรมาส...",
+  "reply": "ไฟล์นี้เป็นเอกสารทางการเงิน...",
   "tokens_used": 450,
   "model": "gpt-4o-mini",
-  "timestamp": "2024-11-02T12:30:00Z",
+  "timestamp": "2025-11-03T19:00:00Z",
   "file_info": {
-    "file_id": "uuid",
-    "filename": "document.pdf",
+    "file_id": "file_uuid_123",
+    "filename": "report.pdf",
     "file_type": "application/pdf",
-    "file_size": 102400
+    "file_size": 1024000
   }
 }
 ```
 
-**Example:**
+**วิธีทดสอบ:**
 ```bash
-# วิเคราะห์ PDF พร้อม prompt
-curl -X POST http://localhost:3000/api/file/analyze \
-  -F "file=@contract.pdf" \
-  -F "analysis_type=detail" \
-  -F "prompt=สรุปสาระสำคัญและภาระผูกพัน" \
-  -F "session_id=session_001"
-
-# วิเคราะห์ไฟล์พร้อมใช้ประวัติการสนทนา
-curl -X POST http://localhost:3000/api/file/analyze \
-  -F "file=@data.xlsx" \
-  -F "session_id=session_001" \
-  -F "use_history=true" \
-  -F "prompt=วิเคราะห์ตามบริบทการสนทนาก่อนหน้า"
+curl -X POST http://localhost:3001/api/file/analyze \
+  -F "file=@document.pdf" \
+  -F "analysis_type=summary" \
+  -F "language=th" \
+  -F "session_id=test_session"
 ```
 
-**การบันทึก Messages:**
-เมื่ออัปโหลดไฟล์ระบุ `session_id` ระบบจะบันทึก 2 messages:
-1. **User message:**
-   ```
-   อัปโหลดไฟล์: document.pdf
-   คำสั่ง: สรุปเอกสารนี้
-   ```
-2. **AI response:** ผลการวิเคราะห์
+---
 
-#### `GET /file/history`
-ดึงประวัติการวิเคราะห์ไฟล์
+### 3.2 ดึงประวัติการวิเคราะห์ไฟล์
+**GET** `/api/file/history?limit=20&offset=0&file_type=all`
+
+ดึงประวัติการวิเคราะห์ไฟล์ทั้งหมด
 
 **Query Parameters:**
-- `limit` (default: 20, max: 100)
-- `offset` (default: 0)
-- `file_type` (optional)
+- `limit` (optional): จำนวนรายการต่อหน้า (default: 20, max: 100)
+- `offset` (optional): เริ่มที่รายการลำดับที่ (default: 0)
+- `file_type` (optional): กรองตามประเภทไฟล์ เช่น `application/pdf`
 
 **Response:**
 ```json
 {
   "files": [
     {
-      "file_id": "uuid",
+      "file_id": "file_uuid_123",
       "filename": "report.pdf",
       "file_type": "application/pdf",
-      "file_size": 102400,
+      "file_size": 1024000,
       "analysis_type": "summary",
       "language": "th",
       "tokens_used": 450,
-      "created_at": "2024-11-02T12:30:00Z"
+      "created_at": "2025-11-03T19:00:00Z"
     }
   ],
-  "total": 23,
+  "total": 25,
   "limit": 20,
   "offset": 0
 }
 ```
 
+**วิธีทดสอบ:**
+```bash
+curl "http://localhost:3001/api/file/history?limit=10"
+```
+
 ---
 
-### 5. Audio (เสียง)
+## 4. Audio API
 
-#### `POST /audio/transcribe`
-แปลงเสียงเป็นข้อความ (Speech-to-Text)
+### 4.1 แปลงเสียงเป็นข้อความ (Speech-to-Text)
+**POST** `/api/audio/transcribe`
+
+อัปโหลดไฟล์เสียงและแปลงเป็นข้อความด้วย Whisper API
 
 **Content-Type:** `multipart/form-data`
 
-**Form Fields:**
-- `audio` (required) - ไฟล์เสียง
+**Form Parameters:**
+- `audio` (required): ไฟล์เสียง (max 25MB)
 
-**Supported:** MP3, MP4, WAV, WEBM, M4A (max 25 MB)
+**รองรับไฟล์:** mp3, mp4, mpeg, mpga, m4a, wav, webm
 
 **Response:**
 ```json
 {
-  "text": "สวัสดีครับ นี่คือข้อความจากไฟล์เสียง",
+  "text": "สวัสดีครับ วันนี้อากาศดีมาก",
   "language": "th",
-  "duration": 5.2,
+  "duration": 3.5,
   "confidence": 0.95,
-  "timestamp": "2024-11-02T12:30:00Z"
+  "timestamp": "2025-11-03T19:00:00Z"
 }
 ```
 
-#### `POST /audio/tts`
-แปลงข้อความเป็นเสียง (Text-to-Speech)
+**วิธีทดสอบ:**
+```bash
+curl -X POST http://localhost:3001/api/audio/transcribe \
+  -F "audio=@voice.mp3"
+```
 
-**Request:**
+---
+
+### 4.2 แปลงข้อความเป็นเสียง (Text-to-Speech)
+**POST** `/api/audio/tts`
+
+แปลงข้อความเป็นไฟล์เสียงด้วย OpenAI TTS API
+
+**Request Body:**
 ```json
 {
-  "text": "สวัสดีครับ",
-  "voice": "nova",
+  "text": "สวัสดีครับ ยินดีต้อนรับ",
+  "voice": "alloy",
   "model": "tts-1",
+  "response_format": "mp3",
   "speed": 1.0
 }
 ```
 
-| Field | Default | Options |
-|-------|---------|---------|
-| `text` | - | สูงสุด 4096 ตัวอักษร |
-| `voice` | nova | alloy, echo, fable, onyx, nova, shimmer |
-| `model` | tts-1 | tts-1, tts-1-hd |
-| `speed` | 1.0 | 0.25 - 4.0 |
+**Parameters:**
+- `text` (required): ข้อความที่ต้องการแปลง (max 4096 characters)
+- `voice` (optional): เสียง - `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer` (default: alloy)
+- `model` (optional): โมเดล - `tts-1`, `tts-1-hd` (default: tts-1)
+- `response_format` (optional): รูปแบบ - `mp3`, `opus`, `aac`, `flac`, `wav`, `pcm` (default: mp3)
+- `speed` (optional): ความเร็ว 0.25-4.0 (default: 1.0)
 
 **Response (JSON):**
 ```json
 {
-  "audio_data": "base64_encoded_audio",
+  "audio_data": "base64_encoded_audio_data...",
   "format": "mp3",
-  "duration": 1.5,
-  "characters_used": 11,
-  "voice": "nova"
+  "duration": 2.5,
+  "characters_used": 25,
+  "voice": "alloy",
+  "timestamp": "2025-11-03T19:00:00Z"
 }
 ```
 
-**Response (Binary):** หาก header `Accept: audio/mpeg`
-- ส่งคืน binary audio stream
-- Headers: `Content-Type: audio/mpeg`, `X-Audio-Duration`
+**Response (Binary):**
+หากส่ง Header `Accept: audio/mpeg` จะได้ไฟล์เสียงโดยตรง
 
----
+**วิธีทดสอบ:**
+```bash
+# รับ JSON response
+curl -X POST http://localhost:3001/api/audio/tts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "สวัสดีครับ",
+    "voice": "nova"
+  }'
 
-### 6. WebSocket Streaming
-
-#### `WebSocket /api/chat/stream`
-รับคำตอบแบบ real-time streaming
-
-**Connection:**
-```javascript
-const ws = new WebSocket('ws://localhost:3000/api/chat/stream');
-```
-
-**Client → Server:**
-```json
-{
-  "type": "message",
-  "content": "AI คืออะไร",
-  "session_id": "session_123",
-  "persona_id": 1,
-  "system_prompt": "คุณเป็นครู",
-  "file_ids": ["uuid1", "uuid2"]
-}
-```
-
-**Server → Client:**
-
-**Chunk (กำลังส่ง):**
-```json
-{
-  "type": "chunk",
-  "content": "AI คือ",
-  "done": false
-}
-```
-
-**Done (เสร็จสิ้น):**
-```json
-{
-  "type": "chunk",
-  "content": "",
-  "done": true,
-  "message_id": "uuid",
-  "tokens_used": 156
-}
-```
-
-**Error:**
-```json
-{
-  "type": "error",
-  "error": "คำอธิบายข้อผิดพลาด"
-}
-```
-
-**Features:**
-- Streaming แบบ token-by-token
-- บันทึก messages อัตโนมัติ
-- รองรับประวัติการสนทนา (10 ข้อความ)
-- รองรับไฟล์แนบ (สูงสุด 5 ไฟล์)
-
----
-
-## 🗄️ Data Models
-
-### Message
-```
-Table: messages
-- id (uuid, PK)
-- session_id (varchar, indexed)
-- role (user|assistant|system)
-- content (text)
-- persona_id (int, FK, nullable)
-- tokens_used (int, nullable)
-- file_attachments (jsonb, default '[]')
-- created_at (timestamp)
-- metadata (jsonb)
-```
-
-**file_attachments Structure:**
-```json
-[
-  {
-    "file_id": "uuid",
-    "filename": "document.pdf",
-    "file_type": "application/pdf",
-    "file_size": 102400
-  }
-]
-```
-
-### FileAnalysis
-```
-Table: file_analyses
-- id (uuid, PK)
-- session_id (varchar, indexed, nullable)
-- filename (varchar)
-- file_type (varchar)
-- file_size (bigint)
-- analysis_type (summary|detail|qa|extract)
-- custom_prompt (text)
-- language (th|en)
-- analysis (text)
-- key_points (text[])
-- entities (text[])
-- sentiment (varchar)
-- tokens_used (int)
-- process_time_ms (float)
-- created_at (timestamp)
-- updated_at (timestamp)
-- deleted_at (timestamp, soft delete)
-- reanalysis_count (int)
-```
-
-### Persona
-```
-Table: personas
-- id (int, PK, auto_increment)
-- name (varchar)
-- system_prompt (text)
-- expertise (varchar)
-- description (text)
-- icon (varchar)
-- is_active (boolean)
-- created_at (timestamp)
+# รับไฟล์เสียงโดยตรง
+curl -X POST http://localhost:3001/api/audio/tts \
+  -H "Content-Type: application/json" \
+  -H "Accept: audio/mpeg" \
+  -d '{
+    "text": "สวัสดีครับ"
+  }' \
+  --output audio.mp3
 ```
 
 ---
 
-## ⚠️ Error Handling
+## โครงสร้าง Database (PostgreSQL)
 
-### HTTP Status Codes
+### Table: `personas`
+เก็บข้อมูล AI personalities
 
-| Code | Meaning | Common Causes |
-|------|---------|---------------|
-| 200 | Success | - |
-| 400 | Bad Request | ข้อมูลไม่ครบ, รูปแบบไม่ถูกต้อง |
-| 404 | Not Found | ไม่พบ persona หรือไฟล์ |
-| 413 | Payload Too Large | ไฟล์ใหญ่เกินกำหนด |
-| 415 | Unsupported Media | ประเภทไฟล์ไม่รองรับ |
-| 422 | Unprocessable Entity | ไม่สามารถแยกข้อมูลจากไฟล์ |
-| 500 | Internal Server Error | ข้อผิดพลาดระบบ |
-| 503 | Service Unavailable | OpenAI API ไม่พร้อมใช้งาน |
+| Column | Type | Description |
+|--------|------|-------------|
+| id | SERIAL PRIMARY KEY | ID |
+| name | VARCHAR(255) | ชื่อ persona |
+| system_prompt | TEXT | System prompt สำหรับ AI |
+| expertise | VARCHAR(255) | ความเชี่ยวชาญ |
+| description | TEXT | คำอธิบาย |
+| icon | VARCHAR(10) | Emoji icon |
+| is_active | BOOLEAN | สถานะ active |
+| created_at | TIMESTAMP | วันที่สร้าง |
 
-### Error Response Format
-```json
-{
-  "error": "คำอธิบายข้อผิดพลาด"
-}
+---
+
+### Table: `messages`
+เก็บข้อความการสนทนา
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID PRIMARY KEY | Message ID |
+| session_id | VARCHAR(255) | Session ID สำหรับจัดกลุ่มการสนทนา |
+| role | VARCHAR(50) | บทบาท: user, assistant, system |
+| content | TEXT | เนื้อหาข้อความ |
+| persona_id | INTEGER | Foreign key → personas.id |
+| tokens_used | INTEGER | จำนวน tokens ที่ใช้ |
+| file_attachments | JSONB | Array ของไฟล์แนบ |
+| created_at | TIMESTAMP | วันที่สร้าง |
+| metadata | JSONB | ข้อมูลเพิ่มเติม |
+
+**Indexes:**
+- `session_id` - ค้นหาประวัติการสนทนา
+- `created_at` - เรียงลำดับตามเวลา
+
+---
+
+### Table: `file_analyses`
+เก็บผลการวิเคราะห์ไฟล์
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID PRIMARY KEY | File ID |
+| session_id | VARCHAR(255) | เชื่อมโยงกับการสนทนา |
+| file_name | VARCHAR(500) | ชื่อไฟล์ |
+| file_type | VARCHAR(100) | MIME type |
+| file_size | BIGINT | ขนาดไฟล์ (bytes) |
+| file_path | VARCHAR(1000) | Path ที่เก็บไฟล์ |
+| analysis_type | VARCHAR(50) | ประเภทการวิเคราะห์ |
+| custom_prompt | TEXT | คำสั่งจากผู้ใช้ |
+| language | VARCHAR(10) | ภาษา |
+| analysis | TEXT | ผลการวิเคราะห์ |
+| key_points | TEXT[] | Array ของประเด็นสำคัญ |
+| entities | TEXT[] | Array ของ entities ที่พบ |
+| sentiment | VARCHAR(50) | Sentiment analysis |
+| tokens_used | INTEGER | จำนวน tokens ที่ใช้ |
+| process_time_ms | FLOAT | เวลาประมวลผล (ms) |
+| reanalysis_count | INTEGER | จำนวนครั้งที่วิเคราะห์ซ้ำ |
+| created_at | TIMESTAMP | วันที่สร้าง |
+| updated_at | TIMESTAMP | วันที่แก้ไขล่าสุด |
+| deleted_at | TIMESTAMP | Soft delete timestamp |
+
+**Indexes:**
+- `session_id` - ค้นหาไฟล์ในการสนทนา
+- `file_type` - กรองตามประเภทไฟล์
+- `created_at` - เรียงตามเวลา
+
+---
+
+## การทำงานของ Functions สำคัญ
+
+### 1. Chat Flow (controllers/chat_controller.go)
+```
+HandleChat()
+  ├─→ parseRequest() - ตรวจสอบข้อมูลที่รับเข้ามา
+  ├─→ getPersonaInfo() - ดึงข้อมูล persona และ system prompt
+  ├─→ getOrGenerateSessionID() - สร้าง session ID ถ้ายังไม่มี
+  ├─→ buildMessages() - สร้าง messages array
+  │    ├─→ ContextService.BuildContextWithHistory() - ดึงประวัติการสนทนา (ถ้า use_history=true)
+  │    └─→ ContextService.BuildFileContext() - เพิ่ม context จากไฟล์
+  ├─→ callOpenAI() - เรียก OpenAI API
+  ├─→ saveMessages() - บันทึกข้อความลง database
+  └─→ buildResponse() - สร้าง response ส่งกลับ
+```
+
+### 2. File Analysis Flow (controllers/file_controller.go)
+```
+AnalyzeFile()
+  ├─→ parseFileRequest() - ตรวจสอบไฟล์และพารามิเตอร์
+  ├─→ ตรวจสอบประเภทไฟล์
+  │    ├─→ รูปภาพ: analyzeImageFile() → FileService.AnalyzeImage()
+  │    └─→ เอกสาร: FileService.AnalyzeFile()
+  │         ├─→ ParseFileContent() - แปลงไฟล์เป็นข้อความ
+  │         ├─→ ContextService.BuildContextWithHistory() - เพิ่ม history (ถ้า use_history=true)
+  │         └─→ OpenAIService - ส่งไปวิเคราะห์
+  ├─→ saveFileAnalysis() - บันทึกผลลง file_analyses table
+  ├─→ saveFileAnalysisMessages() - บันทึกข้อความลง messages table
+  └─→ ส่ง response กลับ
+```
+
+### 3. WebSocket Streaming Flow (controllers/websocket_controller.go)
+```
+HandleStreamingChat()
+  └─→ Message loop
+       └─→ handleMessage()
+            ├─→ ตรวจสอบข้อความ
+            ├─→ ดึงข้อมูล persona
+            ├─→ สร้าง system prompt
+            ├─→ BuildContextWithHistory() - สร้าง context พร้อม history
+            ├─→ OpenAIService.CreateStreamingChatCompletion() - เริ่ม streaming
+            ├─→ วนลูปรับ chunks และส่งกลับ client
+            │    └─→ sendChunk() - ส่ง chunk แต่ละส่วน
+            ├─→ บันทึกข้อความลง database
+            └─→ sendDone() - ส่ง completion message
+```
+
+### 4. Context Service (services/context_service.go)
+```
+BuildContextWithHistory()
+  ├─→ MessageRepository.FindBySessionID() - ดึงประวัติการสนทนา
+  ├─→ สร้าง system message (ถ้ามี)
+  ├─→ แปลง messages เป็น OpenAI format
+  ├─→ BuildFileContext() - เพิ่ม context จากไฟล์ (ถ้ามี)
+  └─→ เพิ่ม current message
 ```
 
 ---
 
-## 💡 Best Practices
+## สิ่งที่ควรเพิ่มในอนาคต
 
-### 1. Conversation History
-✅ **ควรทำ:**
-- ใช้ `session_id` เดียวกันตลอดการสนทนา
-- ตั้งค่า `use_history: true` เพื่อความต่อเนื่อง
-- Backend จำกัดประวัติที่ 10 ข้อความล่าสุด
+### 1. Authentication & Authorization
+- JWT token authentication
+- User management system
+- Role-based access control (RBAC)
+- API rate limiting per user
 
-❌ **ไม่ควรทำ:**
-- เปลี่ยน `session_id` กลางคัน
-- ส่งประวัติทั้งหมดในข้อความ
+### 2. Advanced Features
+- ✅ File re-analysis endpoint (ยังไม่ implement)
+- Message editing และ deletion
+- Conversation branching (fork conversations)
+- Export conversation เป็น PDF/DOCX
+- Search functionality ใน chat history
+- Tags และ categories สำหรับ conversations
 
-### 2. File Attachments
-✅ **ควรทำ:**
-1. อัปโหลดไฟล์ผ่าน `/file/analyze` ก่อน
-2. เก็บ `file_id` ที่ได้รับ
-3. ส่ง `file_ids` array ใน chat request
-4. สูงสุด 5 ไฟล์ต่อข้อความ
+### 3. Performance Optimization
+- Redis caching สำหรับ frequently accessed data
+- Database query optimization
+- Connection pooling
+- Response compression (gzip)
+- CDN สำหรับ static files
 
-❌ **ไม่ควรทำ:**
-- ส่งไฟล์ตรงไปที่ chat endpoint
-- อัปโหลดไฟล์ใหญ่เกินกำหนด
+### 4. Monitoring & Analytics
+- Request/response logging
+- Error tracking (Sentry)
+- Performance metrics (Prometheus)
+- Usage analytics dashboard
+- Token usage tracking และ cost estimation
 
-### 3. System Prompts
-✅ **ควรทำ:**
-- ใช้ภาษาอังกฤษในการเขียน system prompt
-- ระบุรูปแบบผลลัพธ์อย่างชัดเจน
-- ระบุภาษาที่ต้องการในการตอบ
+### 5. File Handling
+- File storage service (S3/MinIO)
+- Larger file support (chunking)
+- File format conversion
+- OCR สำหรับรูปภาพ
+- Audio/Video transcription improvements
 
-**ตัวอย่างที่ดี:**
-```json
-{
-  "system_prompt": "You MUST respond in Thai language. You are a professional consultant. Structure your answers: 1) สรุป 2) รายละเอียด 3) คำแนะนำ"
-}
-```
+### 6. AI Enhancements
+- Multiple AI providers (Anthropic, Google Gemini)
+- Custom fine-tuned models
+- RAG (Retrieval-Augmented Generation)
+- Vector database integration
+- Conversation memory optimization
 
-❌ **ไม่ควรทำ:**
-- ใช้คำสั่งคลุมเครือ
-- สมมติว่า AI รู้ภาษาที่ต้องการตอบ
+### 7. Testing
+- Unit tests coverage > 80%
+- Integration tests
+- E2E tests
+- Load testing
+- Security testing (OWASP)
 
-### 4. Performance
-- ใช้ WebSocket สำหรับคำตอบยาว (streaming)
-- ใช้ REST API สำหรับคำถาม-คำตอบสั้น
-- Cache personas ที่ client
-- ใช้ pagination สำหรับ history
+### 8. DevOps
+- CI/CD pipeline
+- Docker containerization
+- Kubernetes deployment
+- Auto-scaling configuration
+- Backup และ disaster recovery
 
----
+### 9. Security
+- Input validation และ sanitization
+- SQL injection prevention (GORM ป้องกันอยู่แล้ว)
+- XSS protection
+- CSRF protection
+- Rate limiting
+- API key management
+- Secrets management (Vault)
 
-## 📊 Architecture Overview
-
-```
-┌─────────────┐
-│   Persona   │
-│  (3 types)  │
-└──────┬──────┘
-       │
-       │ 1:N
-       ▼
-┌──────────────────────┐        ┌──────────────────┐
-│      Message         │        │   FileAnalysis   │
-│  - session_id        │◄───────│  - session_id    │
-│  - file_attachments  │ refs   │  - analysis      │
-│    (JSONB)           │        │  - key_points    │
-└──────────────────────┘        └──────────────────┘
-```
-
-**Data Flow:**
-1. อัปโหลดไฟล์ → FileAnalysis (เก็บผลวิเคราะห์)
-2. ส่งข้อความ + file_ids → Message (เก็บการสนทนา)
-3. Backend ดึง FileAnalysis ตาม file_ids → สร้าง context
-4. ส่งไปยัง OpenAI → รับคำตอบ
-5. บันทึก assistant message → ส่งกลับ client
-
----
-
-## 🔧 Environment Variables
-
-```env
-# Server
-PORT=3000
-APP_ENV=development
-
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/chatbot
-
-# OpenAI
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_MAX_TOKENS=2000
-OPENAI_TEMPERATURE=0.7
-
-# CORS
-CORS_ORIGIN=http://localhost:5173
-```
+### 10. Documentation
+- OpenAPI/Swagger specification
+- Postman collection
+- Architecture diagrams
+- Deployment guide
+- API versioning strategy
 
 ---
 
-## 📝 Changelog
+## Environment Variables
 
-### Version 2.1.0 (2025-11-02) - **Current**
-- ❌ **ลบ `summary` field** จาก FileAnalysisResponse และ FileAnalysis model
-- ✅ **เพิ่ม prompt ใน user message** เมื่ออัปโหลดไฟล์:
-  ```
-  อัปโหลดไฟล์: document.pdf
-  คำสั่ง: สรุปเอกสารนี้
-  ```
-- ✅ ลบ `analysis_summary` จาก FileAttachment
-- ✅ ปรับปรุง API response ให้กระชับขึ้น
-- ✅ อัปเดตเอกสารให้สั้นและเข้าใจง่าย
-
-### Version 2.0.0 (2025-11-01)
-- ✅ เพิ่มการแนบไฟล์ใน chat (`file_ids`)
-- ✅ Backend สร้าง context จากไฟล์อัตโนมัติ
-- ✅ เพิ่ม `file_attachments` (JSONB) ใน Message
-- ✅ รองรับ WebSocket พร้อมไฟล์
-- ✅ เชื่อม session_id ระหว่าง chat และ file
-
-### Version 1.2.0 (2025-10-31)
-- เพิ่มประวัติการสนทนา
-- เพิ่ม file analysis endpoints
-- รองรับ Vision API
-
-### Version 1.0.0 (2025-10-28)
-- เปิดตัวครั้งแรก
-- Chat, Persona, Audio endpoints
-- WebSocket streaming
+| Variable | Description | Default |
+|----------|-------------|---------|
+| PORT | Server port | 3001 |
+| APP_ENV | Environment (development/production) | development |
+| APP_NAME | Application name | ChatBotAPI |
+| OPENAI_API_KEY | OpenAI API key | - |
+| OPENAI_MODEL | OpenAI model name | gpt-4o-mini |
+| OPENAI_MAX_TOKENS | Max tokens per request | 2000 |
+| OPENAI_TEMPERATURE | AI temperature (0-2) | 0.7 |
+| DATABASE_URL | PostgreSQL connection string | - |
+| CORS_ORIGIN | Allowed CORS origins | localhost:5173,... |
 
 ---
 
-**API Base URL**: `http://localhost:3000/api`
-**WebSocket URL**: `ws://localhost:3000/api/chat/stream`
-**Frontend**: `http://localhost:5173`
+## Error Codes
+
+| HTTP Status | Description |
+|-------------|-------------|
+| 200 | Success |
+| 400 | Bad Request - Invalid input |
+| 404 | Not Found - Resource not found |
+| 413 | Payload Too Large - File too large |
+| 415 | Unsupported Media Type - Invalid file type |
+| 422 | Unprocessable Entity - Cannot process file |
+| 500 | Internal Server Error - Server error |
+| 503 | Service Unavailable - External service error |
+
+---
+
+## Dependencies (go.mod)
+
+**หลัก:**
+- `fiber/v2` - Web framework
+- `gorm` - ORM
+- `go-openai` - OpenAI SDK
+- `websocket` - WebSocket support
+- `postgres` - PostgreSQL driver
+
+**File Processing:**
+- `pdf` - PDF parsing
+- `docx` - DOCX parsing
+- `excelize` - Excel parsing
+- `etree` - XML parsing
+
+**อื่นๆ:**
+- `godotenv` - Environment variables
+- `uuid` - UUID generation
+
+---
+
+## การเปลี่ยนแปลงล่าสุด
+
+### Version 2.0 (2025-11-03)
+**Breaking Changes:**
+- ❌ **ลบไฟล์ `backend/controllers/helpers.go` ออกแล้ว**
+- ✅ เปลี่ยนการจัดการ HTTP responses ทั้งหมดให้ใช้ `c.Status().JSON()` โดยตรง
+- ✅ ย้ายฟังก์ชัน pagination validation เข้าไปในแต่ละ controller
+- ✅ ย้ายการ convert messages เข้าไปใน controller โดยตรง
+
+**ข้อดี:**
+- โค้ดชัดเจนขึ้น อ่านง่ายขึ้น
+- ลด abstraction layer ที่ไม่จำเป็น
+- ลด coupling ระหว่าง controllers
+- ง่ายต่อการ debug และ maintain
+
+**ตัวอย่างการเปลี่ยนแปลง:**
+```go
+// เดิม (Version 1.0)
+return successJSON(c, response)
+return badRequest(c, "Invalid input")
+return internalError(c, "Server error")
+
+// ใหม่ (Version 2.0)
+return c.Status(fiber.StatusOK).JSON(response)
+return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
+return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Server error"})
+```
+
+---
+
+## สรุป
+
+API นี้เป็น chatbot backend ที่สมบูรณ์ รองรับ:
+- ✅ Chat แบบ non-streaming และ streaming (WebSocket)
+- ✅ AI personas ที่หลากหลาย
+- ✅ การวิเคราะห์ไฟล์หลายรูปแบบ
+- ✅ Speech-to-Text และ Text-to-Speech
+- ✅ Conversation history และ context management
+- ✅ Session-based conversations
+- ✅ File integration ใน conversations
+
+Architecture ที่ใช้: **Repository-Service-Controller** เหมาะสำหรับการขยายและบำรุงรักษา
+
+**Code Style:** Direct HTTP responses ด้วย Fiber framework (ไม่ใช้ helper functions)

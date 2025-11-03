@@ -1,0 +1,3 @@
+personas config
+whisper.ppc: v5e-1 TPU, .wave
+brief: การร่างรายละเอียดเกี่ยวกับโปรเจ็ค

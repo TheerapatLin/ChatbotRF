@@ -7,7 +7,6 @@ import (
 	"chatbot/models"
 	"chatbot/repositories"
 	"chatbot/services"
-	"chatbot/utils"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/sashabaranov/go-openai"
@@ -73,12 +72,21 @@ type ChatResponse struct {
 	HistoryCount int          `json:"history_count"`
 }
 
+// MessageHistoryItem represents a message in history
+type MessageHistoryItem struct {
+	ID        string    `json:"id"`
+	Role      string    `json:"role"`
+	Content   string    `json:"content"`
+	PersonaID *int      `json:"persona_id,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // ChatHistoryResponse represents the chat history API response
 type ChatHistoryResponse struct {
-	Messages []utils.MessageHistoryItem `json:"messages"`
-	Total    int64                      `json:"total"`
-	Limit    int                        `json:"limit"`
-	Offset   int                        `json:"offset"`
+	Messages []MessageHistoryItem `json:"messages"`
+	Total    int64                `json:"total"`
+	Limit    int                  `json:"limit"`
+	Offset   int                  `json:"offset"`
 }
 
 // HandleChat handles POST /api/chat endpoint
@@ -104,28 +112,36 @@ func (ctrl *ChatController) HandleChat(c *fiber.Ctx) error {
 	// 5. Call OpenAI service
 	openaiResp, err := ctrl.callOpenAI(req, messages, systemPrompt)
 	if err != nil {
-		return utils.ServiceUnavailable(c, fmt.Sprintf("Failed to get AI response: %v", err))
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to get AI response: %v", err),
+		})
 	}
 
 	// 6. Save messages to database
 	if err := ctrl.saveMessages(req, sessionID, openaiResp); err != nil {
-		return utils.InternalError(c, "Failed to save messages")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to save messages",
+		})
 	}
 
 	// 7. Build and return response
 	response := ctrl.buildResponse(sessionID, openaiResp, personaInfo, req.UseHistory, historyCount)
-	return utils.SuccessJSON(c, response)
+	return c.Status(fiber.StatusOK).JSON(response)
 }
 
 // parseRequest parses and validates the incoming request
 func (ctrl *ChatController) parseRequest(c *fiber.Ctx) (*ChatRequest, error) {
 	var req ChatRequest
 	if err := c.BodyParser(&req); err != nil {
-		return nil, utils.BadRequest(c, "Invalid request body")
+		return nil, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
 	}
 
 	if req.Message == "" {
-		return nil, utils.BadRequest(c, "Message is required")
+		return nil, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Message is required",
+		})
 	}
 
 	return &req, nil
@@ -302,25 +318,47 @@ func (ctrl *ChatController) buildResponse(sessionID string, openaiResp *services
 // GetChatHistory handles GET /api/chat/history endpoint
 func (ctrl *ChatController) GetChatHistory(c *fiber.Ctx) error {
 	// Parse and validate pagination
-	limit, offset := utils.ValidatePagination(
-		c.QueryInt("limit", 50),
-		c.QueryInt("offset", 0),
-		100, // max limit
-	)
+	limit := c.QueryInt("limit", 50)
+	offset := c.QueryInt("offset", 0)
+
+	// Validate pagination
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
 
 	// Get messages from repository
 	messages, total, err := ctrl.messageRepo.FindWithPagination(limit, offset)
 	if err != nil {
-		return utils.InternalError(c, "Failed to retrieve chat history")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to retrieve chat history",
+		})
+	}
+
+	// Convert messages to response items
+	items := make([]MessageHistoryItem, len(messages))
+	for i, msg := range messages {
+		items[i] = MessageHistoryItem{
+			ID:        msg.ID.String(),
+			Role:      string(msg.Role),
+			Content:   msg.Content,
+			PersonaID: msg.PersonaID,
+			CreatedAt: msg.CreatedAt,
+		}
 	}
 
 	// Build response
 	response := ChatHistoryResponse{
-		Messages: utils.ToMessageHistoryItems(messages),
+		Messages: items,
 		Total:    total,
 		Limit:    limit,
 		Offset:   offset,
 	}
 
-	return utils.SuccessJSON(c, response)
+	return c.Status(fiber.StatusOK).JSON(response)
 }
