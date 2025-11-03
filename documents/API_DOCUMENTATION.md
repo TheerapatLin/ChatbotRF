@@ -100,7 +100,7 @@ Server จะเปิดที่: `http://localhost:3001`
 ### 1.1 ดึงรายการ Personas ทั้งหมด
 **GET** `/api/personas`
 
-ดึงรายการ AI personas ที่ active ทั้งหมด
+ดึงรายการ AI personas ที่ active ทั้งหมดพร้อม configuration ครบถ้วน
 
 **Response:**
 ```json
@@ -109,12 +109,31 @@ Server จะเปิดที่: `http://localhost:3001`
     {
       "id": 1,
       "name": "ผู้ช่วยทั่วไป",
-      "system_prompt": "คุณคือผู้ช่วย AI ที่เป็นมิตร...",
-      "expertise": "ทั่วไป",
-      "description": "ผู้ช่วยอเนกประสงค์",
+      "description": "ผู้ช่วย AI อเนกประสงค์ที่ตอบคำถามได้หลากหลาย",
+      "system_prompt": "คุณคือผู้ช่วย AI ที่เป็นมิตรและให้ข้อมูลที่ถูกต้อง...",
+      "tone": "friendly",
+      "style": "conversational",
+      "expertise": "general",
+      "temperature": 0.7,
+      "max_tokens": 2000,
+      "model": "gpt-4o-mini",
+      "language_setting": {
+        "default_language": "th",
+        "response_style": "casual",
+        "language_code": "th-TH"
+      },
+      "guardrails": {
+        "block_profanity": true,
+        "block_sensitive": true,
+        "allowed_topics": ["general", "technology", "education"],
+        "blocked_topics": ["politics", "religion"],
+        "max_response_length": 4000,
+        "require_moderation": false
+      },
       "icon": "🤖",
       "is_active": true,
-      "created_at": "2025-11-03T19:00:00Z"
+      "created_at": "2025-11-03T19:00:00Z",
+      "updated_at": "2025-11-03T19:00:00Z"
     }
   ]
 }
@@ -130,19 +149,38 @@ curl http://localhost:3001/api/personas
 ### 1.2 ดึงข้อมูล Persona ตามไอดี
 **GET** `/api/personas/:id`
 
-ดึงข้อมูลละเอียดของ persona พร้อมสถิติ
+ดึงข้อมูลละเอียดของ persona พร้อมสถิติการใช้งาน
 
 **Response:**
 ```json
 {
   "id": 1,
   "name": "ผู้ช่วยทั่วไป",
-  "system_prompt": "คุณคือผู้ช่วย AI...",
-  "expertise": "ทั่วไป",
-  "description": "ผู้ช่วยอเนกประสงค์",
+  "description": "ผู้ช่วย AI อเนกประสงค์ที่ตอบคำถามได้หลากหลาย",
+  "system_prompt": "คุณคือผู้ช่วย AI ที่เป็นมิตร...",
+  "tone": "friendly",
+  "style": "conversational",
+  "expertise": "general",
+  "temperature": 0.7,
+  "max_tokens": 2000,
+  "model": "gpt-4o-mini",
+  "language_setting": {
+    "default_language": "th",
+    "response_style": "casual",
+    "language_code": "th-TH"
+  },
+  "guardrails": {
+    "block_profanity": true,
+    "block_sensitive": true,
+    "allowed_topics": ["general", "technology"],
+    "blocked_topics": ["politics"],
+    "max_response_length": 4000,
+    "require_moderation": false
+  },
   "icon": "🤖",
   "is_active": true,
   "created_at": "2025-11-03T19:00:00Z",
+  "updated_at": "2025-11-03T19:00:00Z",
   "stats": {
     "total_messages": 150,
     "avg_response_time": "2.3s"
@@ -220,7 +258,28 @@ curl -X POST http://localhost:3001/api/chat \
 
 ---
 
-### 2.2 ดึงประวัติการสนทนา
+### 2.2 ลบข้อความทั้งหมด
+**DELETE** `/api/chat`
+
+ลบข้อความทั้งหมดในฐานข้อมูล (ใช้สำหรับล้างข้อมูลทั้งหมด)
+
+**Response:**
+```json
+{
+  "message": "All messages deleted successfully"
+}
+```
+
+**วิธีทดสอบ:**
+```bash
+curl -X DELETE http://localhost:3001/api/chat
+```
+
+**⚠️ คำเตือน:** คำสั่งนี้จะลบข้อความทั้งหมดในฐานข้อมูล ใช้ด้วยความระมัดระวัง!
+
+---
+
+### 2.3 ดึงประวัติการสนทนา
 **GET** `/api/chat/history?limit=50&offset=0`
 
 ดึงประวัติข้อความทั้งหมด พร้อม pagination
@@ -261,7 +320,7 @@ curl "http://localhost:3001/api/chat/history?limit=10&offset=0"
 
 ---
 
-### 2.3 Chat แบบ Streaming (WebSocket)
+### 2.4 Chat แบบ Streaming (WebSocket)
 **WebSocket** `/api/chat/stream`
 
 เชื่อมต่อ WebSocket สำหรับรับคำตอบแบบ real-time streaming
@@ -317,66 +376,119 @@ ws.onmessage = (event) => {
 
 ---
 
-## 3. File Analysis API
+## 3. File Upload API
 
-### 3.1 อัปโหลดและวิเคราะห์ไฟล์
-**POST** `/api/file/analyze`
+### 3.1 อัปโหลดไฟล์ (รองรับหลายไฟล์)
+**POST** `/api/file/upload`
 
-อัปโหลดไฟล์และให้ AI วิเคราะห์เนื้อหา
+อัปโหลดไฟล์ไปยัง server โดยไม่มีการวิเคราะห์ด้วย AI (รองรับสูงสุด 5 ไฟล์ต่อครั้ง)
 
 **Content-Type:** `multipart/form-data`
 
 **Form Parameters:**
-- `file` (required): ไฟล์ที่ต้องการวิเคราะห์
-- `analysis_type` (optional): ประเภทการวิเคราะห์
-  - `summary` (default): สรุปเนื้อหา
-  - `detail`: วิเคราะห์ละเอียด
-  - `qa`: ถามตอบเกี่ยวกับไฟล์
-  - `extract`: ดึงข้อมูลสำคัญ
-- `prompt` (optional): คำสั่งเพิ่มเติม
-- `language` (optional): ภาษา `th` หรือ `en` (default: th)
-- `session_id` (optional): ID สำหรับเชื่อมโยงกับ conversation
-- `system_prompt` (optional): Custom system prompt
-- `use_history` (optional): ใช้ประวัติการสนทนา (default: false)
+- `files` (required): ไฟล์ที่ต้องการอัปโหลด (สูงสุด 5 ไฟล์)
 
-**รองรับไฟล์:**
+**รองรับไฟล์ทุกประเภท:**
 - เอกสาร: PDF, DOCX, XLSX, PPTX, TXT, MD, CSV, JSON, XML
-- รูปภาพ: JPG, PNG, GIF, WEBP
-- โค้ด: JS, PY, GO, JAVA
+- รูปภาพ: JPG, PNG, GIF, WEBP, BMP
+- โค้ด: JS, PY, GO, JAVA, CPP, etc.
+- อื่นๆ: ZIP, RAR, MP3, MP4, etc.
 
-**Response:**
+**Response (อัปโหลดสำเร็จทั้งหมด):**
 ```json
 {
-  "message_id": "file_uuid_123",
-  "session_id": "session_123",
-  "reply": "ไฟล์นี้เป็นเอกสารทางการเงิน...",
-  "tokens_used": 450,
-  "model": "gpt-4o-mini",
-  "timestamp": "2025-11-03T19:00:00Z",
-  "file_info": {
-    "file_id": "file_uuid_123",
-    "filename": "report.pdf",
-    "file_type": "application/pdf",
-    "file_size": 1024000
-  }
+  "success": 3,
+  "failed": 0,
+  "total": 3,
+  "uploaded_files": [
+    {
+      "file_id": "uuid-1",
+      "file_name": "report.pdf",
+      "storage_path": "./uploads/uuid-1_report.pdf",
+      "mime_type": "application/pdf",
+      "file_size": 245678,
+      "uploaded_at": "2025-11-03T19:00:00Z"
+    },
+    {
+      "file_id": "uuid-2",
+      "file_name": "image.jpg",
+      "storage_path": "./uploads/uuid-2_image.jpg",
+      "mime_type": "image/jpeg",
+      "file_size": 156789,
+      "uploaded_at": "2025-11-03T19:00:00Z"
+    },
+    {
+      "file_id": "uuid-3",
+      "file_name": "data.xlsx",
+      "storage_path": "./uploads/uuid-3_data.xlsx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "file_size": 89012,
+      "uploaded_at": "2025-11-03T19:00:00Z"
+    }
+  ]
 }
 ```
 
-**วิธีทดสอบ:**
+**Response (อัปโหลดบางไฟล์สำเร็จ):**
+```json
+{
+  "success": 2,
+  "failed": 1,
+  "total": 3,
+  "uploaded_files": [
+    {
+      "file_id": "uuid-1",
+      "file_name": "report.pdf",
+      "storage_path": "./uploads/uuid-1_report.pdf",
+      "mime_type": "application/pdf",
+      "file_size": 245678,
+      "uploaded_at": "2025-11-03T19:00:00Z"
+    },
+    {
+      "file_id": "uuid-2",
+      "file_name": "image.jpg",
+      "storage_path": "./uploads/uuid-2_image.jpg",
+      "mime_type": "image/jpeg",
+      "file_size": 156789,
+      "uploaded_at": "2025-11-03T19:00:00Z"
+    }
+  ],
+  "failed_files": [
+    {
+      "file_name": "corrupted.docx",
+      "error": "failed to save file to disk"
+    }
+  ]
+}
+```
+
+**Error Response (เกินจำนวนไฟล์ที่อนุญาต):**
+```json
+{
+  "error": "maximum 5 files allowed per upload"
+}
+```
+
+**วิธีทดสอบ (อัปโหลดไฟล์เดียว):**
 ```bash
-curl -X POST http://localhost:3001/api/file/analyze \
-  -F "file=@document.pdf" \
-  -F "analysis_type=summary" \
-  -F "language=th" \
-  -F "session_id=test_session"
+curl -X POST http://localhost:3001/api/file/upload \
+  -F "files=@document.pdf"
+```
+
+**วิธีทดสอบ (อัปโหลดหลายไฟล์):**
+```bash
+curl -X POST http://localhost:3001/api/file/upload \
+  -F "files=@document.pdf" \
+  -F "files=@image.jpg" \
+  -F "files=@data.xlsx"
 ```
 
 ---
 
-### 3.2 ดึงประวัติการวิเคราะห์ไฟล์
+### 3.2 ดึงประวัติการอัปโหลดไฟล์
 **GET** `/api/file/history?limit=20&offset=0&file_type=all`
 
-ดึงประวัติการวิเคราะห์ไฟล์ทั้งหมด
+ดึงประวัติการอัปโหลดไฟล์ทั้งหมด
 
 **Query Parameters:**
 - `limit` (optional): จำนวนรายการต่อหน้า (default: 20, max: 100)
@@ -388,14 +500,12 @@ curl -X POST http://localhost:3001/api/file/analyze \
 {
   "files": [
     {
-      "file_id": "file_uuid_123",
-      "filename": "report.pdf",
-      "file_type": "application/pdf",
-      "file_size": 1024000,
-      "analysis_type": "summary",
-      "language": "th",
-      "tokens_used": 450,
-      "created_at": "2025-11-03T19:00:00Z"
+      "file_id": "uuid-123",
+      "file_name": "report.pdf",
+      "storage_path": "./uploads/uuid-123_report.pdf",
+      "mime_type": "application/pdf",
+      "file_size": 245678,
+      "uploaded_at": "2025-11-03T19:00:00Z"
     }
   ],
   "total": 25,
@@ -408,6 +518,30 @@ curl -X POST http://localhost:3001/api/file/analyze \
 ```bash
 curl "http://localhost:3001/api/file/history?limit=10"
 ```
+
+---
+
+### 3.3 ลบไฟล์ทั้งหมด
+**DELETE** `/api/file/uploads`
+
+ลบข้อมูลไฟล์ทั้งหมดในฐานข้อมูล (ใช้สำหรับล้างข้อมูลทั้งหมด)
+
+**Response:**
+```json
+{
+  "message": "All file records deleted successfully"
+}
+```
+
+**วิธีทดสอบ:**
+```bash
+curl -X DELETE http://localhost:3001/api/file/uploads
+```
+
+**⚠️ คำเตือน:**
+- คำสั่งนี้จะลบ**บันทึกไฟล์ทั้งหมด**ในฐานข้อมูล
+- **ไฟล์จริงบน disk จะยังคงอยู่** ที่ `./uploads/`
+- ใช้ด้วยความระมัดระวัง!
 
 ---
 
@@ -507,18 +641,47 @@ curl -X POST http://localhost:3001/api/audio/tts \
 ## โครงสร้าง Database (PostgreSQL)
 
 ### Table: `personas`
-เก็บข้อมูล AI personalities
+เก็บข้อมูล AI personalities พร้อม configuration ครบถ้วน
 
 | Column | Type | Description |
 |--------|------|-------------|
 | id | SERIAL PRIMARY KEY | ID |
-| name | VARCHAR(255) | ชื่อ persona |
-| system_prompt | TEXT | System prompt สำหรับ AI |
-| expertise | VARCHAR(255) | ความเชี่ยวชาญ |
-| description | TEXT | คำอธิบาย |
-| icon | VARCHAR(10) | Emoji icon |
-| is_active | BOOLEAN | สถานะ active |
+| name | VARCHAR(100) UNIQUE | ชื่อ persona (ไม่ซ้ำ) |
+| description | TEXT | คำอธิบายละเอียด |
+| system_prompt | TEXT NOT NULL | System prompt สำหรับ AI |
+| tone | VARCHAR(50) | โทนเสียง (e.g., friendly, professional) |
+| style | VARCHAR(50) | สไตล์การตอบ (e.g., concise, detailed) |
+| expertise | VARCHAR(100) | ความเชี่ยวชาญ (e.g., technology, healthcare) |
+| temperature | DECIMAL(3,2) | ค่า temperature (0.0-2.0, default: 0.7) |
+| max_tokens | INTEGER | จำนวน tokens สูงสุด (default: 2000) |
+| model | VARCHAR(50) | โมเดล AI (default: gpt-4o-mini) |
+| language_setting | JSONB | การตั้งค่าภาษา (JSON) |
+| guardrails | JSONB | กฎการกรองเนื้อหา (JSON) |
+| icon | VARCHAR(50) | Emoji icon |
+| is_active | BOOLEAN | สถานะ active (default: true) |
 | created_at | TIMESTAMP | วันที่สร้าง |
+| updated_at | TIMESTAMP | วันที่อัปเดตล่าสุด |
+
+**JSON Schema - language_setting:**
+```json
+{
+  "default_language": "th",      // ภาษาหลัก (th, en, etc.)
+  "response_style": "casual",    // สไตล์การตอบ (formal, casual, professional)
+  "language_code": "th-TH"       // รหัสภาษา ISO 639-1
+}
+```
+
+**JSON Schema - guardrails:**
+```json
+{
+  "block_profanity": true,        // บล็อกคำหยาบ
+  "block_sensitive": true,        // บล็อกเนื้อหาละเอียดอ่อน
+  "allowed_topics": [],           // หัวข้อที่อนุญาต
+  "blocked_topics": [],           // หัวข้อที่ห้าม
+  "max_response_length": 4000,    // ความยาวคำตอบสูงสุด
+  "require_moderation": false     // ต้องการ moderation
+}
+```
 
 ---
 
@@ -731,6 +894,7 @@ BuildContextWithHistory()
 | HTTP Status | Description |
 |-------------|-------------|
 | 200 | Success |
+| 206 | Partial Content - Some files uploaded successfully |
 | 400 | Bad Request - Invalid input |
 | 404 | Not Found - Resource not found |
 | 413 | Payload Too Large - File too large |
@@ -763,6 +927,92 @@ BuildContextWithHistory()
 ---
 
 ## การเปลี่ยนแปลงล่าสุด
+
+### Version 4.0 (2025-11-03)
+**Breaking Changes - Enhanced Persona System:**
+- ✅ **ขยาย Persona schema ให้มีการตั้งค่าครบถ้วน**
+- ✅ เพิ่มฟิลด์ใหม่:
+  - `tone` - โทนเสียง (friendly, professional, empathetic)
+  - `style` - สไตล์การตอบ (concise, detailed, conversational)
+  - `temperature` - ค่า temperature (0.0-2.0)
+  - `max_tokens` - จำนวน tokens สูงสุด
+  - `model` - โมเดล AI ที่ใช้
+  - `language_setting` (JSONB) - การตั้งค่าภาษาและสไตล์การตอบ
+  - `guardrails` (JSONB) - กฎการกรองเนื้อหาและความปลอดภัย
+  - `updated_at` - เวลาอัปเดตล่าสุด
+- ✅ เพิ่ม struct `LanguageSetting` และ `Guardrails` สำหรับ configuration
+- ✅ เปลี่ยน `name` เป็น UNIQUE constraint
+
+**คุณสมบัติใหม่:**
+- ✅ รองรับ content filtering ผ่าน Guardrails
+- ✅ ตั้งค่าภาษาและสไตล์การตอบแบบละเอียด
+- ✅ กำหนด AI model และ parameters แยกต่างหากแต่ละ persona
+- ✅ จัดการหัวข้อที่อนุญาตและห้าม
+- ✅ ควบคุมความยาวคำตอบสูงสุด
+
+**ตัวอย่าง Persona Configuration:**
+```json
+{
+  "name": "Professional Assistant",
+  "tone": "professional",
+  "style": "detailed",
+  "temperature": 0.5,
+  "model": "gpt-4",
+  "language_setting": {
+    "default_language": "en",
+    "response_style": "formal",
+    "language_code": "en-US"
+  },
+  "guardrails": {
+    "block_profanity": true,
+    "allowed_topics": ["business", "technology"],
+    "max_response_length": 3000
+  }
+}
+```
+
+### Version 3.1 (2025-11-03)
+**New Features:**
+- ✅ เพิ่ม API `DELETE /api/file/uploads` สำหรับลบบันทึกไฟล์ทั้งหมด
+- ✅ เพิ่ม `DeleteAll()` method ใน FileAnalysisRepository
+- ✅ ใช้ GORM `AllowGlobalUpdate` เพื่อป้องกันการลบข้อมูลโดยไม่ตั้งใจ
+
+**⚠️ หมายเหตุ:** การลบจะลบเฉพาะบันทึกใน DB ไฟล์บน disk จะยังคงอยู่
+
+### Version 3.0 (2025-11-03)
+**Breaking Changes - File Upload System:**
+- ✅ **ลบการวิเคราะห์ด้วย AI ออกจาก File Upload API**
+- ✅ เปลี่ยน endpoint จาก `/api/file/analyze` เป็น `/api/file/uploads`
+- ✅ รองรับการอัปโหลดหลายไฟล์พร้อมกัน (สูงสุด 5 ไฟล์)
+- ✅ บันทึกเฉพาะ metadata (file_name, storage_path, mime_type, file_size, uploaded_at)
+- ✅ ลบฟิลด์ที่เกี่ยวกับ AI analysis ออกจาก FileAnalysis model
+- ✅ อัปเดต repository methods ให้ใช้ `mime_type` และ `uploaded_at`
+
+**คุณสมบัติใหม่:**
+- ✅ Form field เปลี่ยนจาก `file` เป็น `files` (รองรับ multiple files)
+- ✅ Response แสดงสถิติการอัปโหลด (success, failed, total)
+- ✅ Partial upload support - ถ้าบางไฟล์ล้มเหลว ไฟล์อื่นยังอัปโหลดได้
+- ✅ Auto-cleanup - ลบไฟล์จาก disk ถ้าบันทึก DB ล้มเหลว
+- ✅ HTTP Status 206 (Partial Content) สำหรับการอัปโหลดบางไฟล์สำเร็จ
+
+**ตัวอย่างการใช้งาน:**
+```bash
+# อัปโหลดไฟล์เดียว
+curl -X POST http://localhost:3001/api/file/uploads \
+  -F "files=@document.pdf"
+
+# อัปโหลดหลายไฟล์
+curl -X POST http://localhost:3001/api/file/uploads \
+  -F "files=@doc1.pdf" \
+  -F "files=@image.jpg" \
+  -F "files=@data.xlsx"
+```
+
+### Version 2.1 (2025-11-03)
+**New Features:**
+- ✅ เพิ่ม API `DELETE /api/chats` สำหรับลบข้อความทั้งหมด
+- ✅ เพิ่ม `DeleteAll()` method ใน MessageRepository
+- ✅ ใช้ GORM `AllowGlobalUpdate` เพื่อป้องกันการลบข้อมูลโดยไม่ตั้งใจ
 
 ### Version 2.0 (2025-11-03)
 **Breaking Changes:**
