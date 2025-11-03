@@ -52,7 +52,7 @@ func (r *FileAnalysisRepository) GetAll(limit, offset int) ([]models.FileAnalysi
 	}
 
 	// Get paginated records
-	err := r.db.Order("created_at DESC").
+	err := r.db.Order("uploaded_at DESC").
 		Limit(limit).
 		Offset(offset).
 		Find(&analyses).Error
@@ -64,12 +64,12 @@ func (r *FileAnalysisRepository) GetAll(limit, offset int) ([]models.FileAnalysi
 	return analyses, total, nil
 }
 
-// GetByFileType retrieves file analyses filtered by file type
-func (r *FileAnalysisRepository) GetByFileType(fileType string, limit, offset int) ([]models.FileAnalysis, int64, error) {
+// GetByFileType retrieves file analyses filtered by MIME type
+func (r *FileAnalysisRepository) GetByFileType(mimeType string, limit, offset int) ([]models.FileAnalysis, int64, error) {
 	var analyses []models.FileAnalysis
 	var total int64
 
-	query := r.db.Model(&models.FileAnalysis{}).Where("file_type = ?", fileType)
+	query := r.db.Model(&models.FileAnalysis{}).Where("mime_type = ?", mimeType)
 
 	// Count total records
 	if err := query.Count(&total).Error; err != nil {
@@ -77,7 +77,7 @@ func (r *FileAnalysisRepository) GetByFileType(fileType string, limit, offset in
 	}
 
 	// Get paginated records
-	err := query.Order("created_at DESC").
+	err := query.Order("uploaded_at DESC").
 		Limit(limit).
 		Offset(offset).
 		Find(&analyses).Error
@@ -99,18 +99,10 @@ func (r *FileAnalysisRepository) Delete(id uuid.UUID) error {
 	return r.db.Delete(&models.FileAnalysis{}, "id = ?", id).Error
 }
 
-// IncrementReanalysisCount increments the reanalysis counter
-func (r *FileAnalysisRepository) IncrementReanalysisCount(id uuid.UUID) error {
-	return r.db.Model(&models.FileAnalysis{}).
-		Where("id = ?", id).
-		UpdateColumn("reanalysis_count", gorm.Expr("reanalysis_count + 1")).
-		Error
-}
-
-// GetRecentAnalyses retrieves the most recent file analyses
+// GetRecentAnalyses retrieves the most recent file uploads
 func (r *FileAnalysisRepository) GetRecentAnalyses(limit int) ([]models.FileAnalysis, error) {
 	var analyses []models.FileAnalysis
-	err := r.db.Order("created_at DESC").
+	err := r.db.Order("uploaded_at DESC").
 		Limit(limit).
 		Find(&analyses).Error
 
@@ -121,7 +113,7 @@ func (r *FileAnalysisRepository) GetRecentAnalyses(limit int) ([]models.FileAnal
 	return analyses, nil
 }
 
-// SearchByFileName searches file analyses by filename (partial match)
+// SearchByFileName searches file uploads by filename (partial match)
 func (r *FileAnalysisRepository) SearchByFileName(filename string, limit, offset int) ([]models.FileAnalysis, int64, error) {
 	var analyses []models.FileAnalysis
 	var total int64
@@ -134,7 +126,7 @@ func (r *FileAnalysisRepository) SearchByFileName(filename string, limit, offset
 	}
 
 	// Get paginated records
-	err := query.Order("created_at DESC").
+	err := query.Order("uploaded_at DESC").
 		Limit(limit).
 		Offset(offset).
 		Find(&analyses).Error
@@ -146,77 +138,39 @@ func (r *FileAnalysisRepository) SearchByFileName(filename string, limit, offset
 	return analyses, total, nil
 }
 
-// GetBySessionID retrieves all file analyses for a specific session
-func (r *FileAnalysisRepository) GetBySessionID(sessionID string) ([]models.FileAnalysis, error) {
-	var analyses []models.FileAnalysis
-	err := r.db.Where("session_id = ?", sessionID).
-		Order("created_at DESC").
-		Find(&analyses).Error
-
-	if err != nil {
-		return nil, err
-	}
-
-	return analyses, nil
-}
-
-// GetRecentBySessionID retrieves recent file analyses for a session with limit
-func (r *FileAnalysisRepository) GetRecentBySessionID(sessionID string, limit int) ([]models.FileAnalysis, error) {
-	var analyses []models.FileAnalysis
-	err := r.db.Where("session_id = ?", sessionID).
-		Order("created_at DESC").
-		Limit(limit).
-		Find(&analyses).Error
-
-	if err != nil {
-		return nil, err
-	}
-
-	return analyses, nil
-}
-
-// GetStatistics returns analysis statistics
+// GetStatistics returns file upload statistics
 func (r *FileAnalysisRepository) GetStatistics() (map[string]interface{}, error) {
 	stats := make(map[string]interface{})
 
-	// Total analyses
+	// Total uploads
 	var totalCount int64
 	if err := r.db.Model(&models.FileAnalysis{}).Count(&totalCount).Error; err != nil {
 		return nil, err
 	}
-	stats["total_analyses"] = totalCount
+	stats["total_uploads"] = totalCount
 
-	// Count by file type
-	type FileTypeCount struct {
-		FileType string
+	// Count by MIME type
+	type MimeTypeCount struct {
+		MimeType string
 		Count    int64
 	}
-	var fileTypeCounts []FileTypeCount
+	var mimeTypeCounts []MimeTypeCount
 	if err := r.db.Model(&models.FileAnalysis{}).
-		Select("file_type, COUNT(*) as count").
-		Group("file_type").
-		Scan(&fileTypeCounts).Error; err != nil {
+		Select("mime_type, COUNT(*) as count").
+		Group("mime_type").
+		Scan(&mimeTypeCounts).Error; err != nil {
 		return nil, err
 	}
-	stats["by_file_type"] = fileTypeCounts
+	stats["by_mime_type"] = mimeTypeCounts
 
-	// Average processing time
-	var avgProcessTime float64
+	// Total storage size
+	var totalSize int64
 	if err := r.db.Model(&models.FileAnalysis{}).
-		Select("AVG(process_time_ms) as avg_time").
-		Scan(&avgProcessTime).Error; err != nil {
+		Select("SUM(file_size) as total").
+		Scan(&totalSize).Error; err != nil {
 		return nil, err
 	}
-	stats["avg_process_time_ms"] = avgProcessTime
-
-	// Total tokens used
-	var totalTokens int64
-	if err := r.db.Model(&models.FileAnalysis{}).
-		Select("SUM(tokens_used) as total").
-		Scan(&totalTokens).Error; err != nil {
-		return nil, err
-	}
-	stats["total_tokens_used"] = totalTokens
+	stats["total_storage_bytes"] = totalSize
 
 	return stats, nil
 }

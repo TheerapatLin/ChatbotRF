@@ -84,7 +84,7 @@ func (s *ContextService) BuildFileContext(fileIDs []string) (string, error) {
 
 	successCount := 0
 	for i, fileID := range fileIDs {
-		analysis, err := s.fileAnalysisRepo.FindByID(fileID)
+		fileRecord, err := s.fileAnalysisRepo.FindByID(fileID)
 		if err != nil {
 			contextParts = append(contextParts,
 				fmt.Sprintf("⚠️  File %d: [Error: File not found - ID: %s]", i+1, fileID))
@@ -93,14 +93,15 @@ func (s *ContextService) BuildFileContext(fileIDs []string) (string, error) {
 
 		successCount++
 		contextParts = append(contextParts,
-			fmt.Sprintf("--- 📄 File %d: %s ---", i+1, analysis.FileName))
+			fmt.Sprintf("--- 📄 File %d: %s ---", i+1, fileRecord.FileName))
 		contextParts = append(contextParts,
-			fmt.Sprintf("Type: %s", analysis.FileType))
+			fmt.Sprintf("MIME Type: %s", fileRecord.MimeType))
 		contextParts = append(contextParts,
-			fmt.Sprintf("Size: %s", formatFileSize(analysis.FileSize)))
+			fmt.Sprintf("Size: %s", formatFileSize(fileRecord.FileSize)))
+		contextParts = append(contextParts,
+			fmt.Sprintf("Storage Path: %s", fileRecord.StoragePath))
 		contextParts = append(contextParts, "")
-		contextParts = append(contextParts, "Analysis Result:")
-		contextParts = append(contextParts, analysis.Analysis)
+		contextParts = append(contextParts, "Note: File is stored on server for reference")
 		contextParts = append(contextParts, "")
 		contextParts = append(contextParts, strings.Repeat("-", 60))
 		contextParts = append(contextParts, "")
