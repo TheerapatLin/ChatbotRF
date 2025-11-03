@@ -56,17 +56,17 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	api.Post("/audio/transcribe", audioCtrl.TranscribeAudio)
 	api.Post("/audio/tts", audioCtrl.TextToSpeech)
 
-	// File analysis endpoints
-	api.Post("/file/analyze", fileCtrl.AnalyzeFile)
+	// File upload endpoints
+	api.Post("/file/uploads", fileCtrl.UploadFiles)
 	api.Get("/file/history", fileCtrl.GetFileHistory)
-	api.Post("/file/:file_id/reanalyze", fileCtrl.ReanalyzeFile) // TODO: not yet implemented
+	api.Delete("/file/uploads", fileCtrl.DeleteAllFiles)
 
 	// WebSocket upgrade middleware: ตรวจสอบ request จาก client
 	app.Use("/api/chat/stream", func(c *fiber.Ctx) error {
 		// IsWebSocketUpgrade returns true if the client requested upgrade to the WebSocket protocol
 		if websocket.IsWebSocketUpgrade(c) {
 			c.Locals("allowed", true) // อนุญาติให้ใช้ WebSocket
-			return c.Next() // ส่งต่อไปยัง WebSocket Endpoint
+			return c.Next()           // ส่งต่อไปยัง WebSocket Endpoint
 		}
 		return fiber.ErrUpgradeRequired
 	})

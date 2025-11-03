@@ -37,23 +37,33 @@ type UploadFileRequest struct {
 	// No additional fields needed - just the file
 }
 
-// AnalyzeFile handles POST /api/file/analyze endpoint
-func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
-	// 1. Get uploaded file
-	file, err := c.FormFile("file")
+// UploadFiles handles POST /api/file/upload endpoint
+// Supports multiple file uploads (max 5 files)
+func (ctrl *FileController) UploadFiles(c *fiber.Ctx) error {
+	// 1. Parse multipart form
+	form, err := c.MultipartForm()
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "file is required",
+			"error": "failed to parse form data",
 		})
 	}
 
-	// 2. Get MIME type
-	mimeType := file.Header.Get("Content-Type")
-	if mimeType == "" {
-		mimeType = "application/octet-stream" // Default MIME type
+	// 2. Get uploaded files
+	files := form.File["files"]
+	if len(files) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "at least one file is required",
+		})
 	}
 
-	// 3. Create uploads directory if not exists
+	// 3. Validate file count (max 5 files)
+	if len(files) > 5 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "maximum 5 files allowed per upload",
+		})
+	}
+
+	// 4. Create uploads directory if not exists
 	uploadDir := "./uploads"
 	if err := ensureDir(uploadDir); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -61,45 +71,86 @@ func (ctrl *FileController) AnalyzeFile(c *fiber.Ctx) error {
 		})
 	}
 
-	// 4. Generate unique filename
-	fileID := uuid.New()
-	storagePath := fmt.Sprintf("%s/%s_%s", uploadDir, fileID.String(), file.Filename)
+	// 5. Process each file
+	uploadedFiles := make([]fiber.Map, 0, len(files))
+	failedFiles := make([]fiber.Map, 0)
 
-	// 5. Save file to disk
-	if err := c.SaveFile(file, storagePath); err != nil {
-		log.Printf("⚠️  Failed to save file to disk: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to save file",
+	for _, file := range files {
+		// Get MIME type
+		mimeType := file.Header.Get("Content-Type")
+		if mimeType == "" {
+			mimeType = "application/octet-stream"
+		}
+
+		// Generate unique filename
+		fileID := uuid.New()
+		storagePath := fmt.Sprintf("%s/%s_%s", uploadDir, fileID.String(), file.Filename)
+
+		// Save file to disk
+		if err := c.SaveFile(file, storagePath); err != nil {
+			log.Printf("⚠️  Failed to save file to disk: %s - %v", file.Filename, err)
+			failedFiles = append(failedFiles, fiber.Map{
+				"file_name": file.Filename,
+				"error":     "failed to save file to disk",
+			})
+			continue
+		}
+
+		// Save metadata to database
+		fileAnalysis := &models.FileAnalysis{
+			ID:          fileID,
+			FileName:    file.Filename,
+			StoragePath: storagePath,
+			MimeType:    mimeType,
+			FileSize:    file.Size,
+		}
+
+		if err := ctrl.repository.Create(fileAnalysis); err != nil {
+			log.Printf("⚠️  Failed to save file metadata to database: %s - %v", file.Filename, err)
+			// Try to delete the file from disk if DB save failed
+			os.Remove(storagePath)
+			failedFiles = append(failedFiles, fiber.Map{
+				"file_name": file.Filename,
+				"error":     "failed to save file metadata",
+			})
+			continue
+		}
+
+		// Add to successful uploads
+		uploadedFiles = append(uploadedFiles, fiber.Map{
+			"file_id":      fileAnalysis.ID.String(),
+			"file_name":    fileAnalysis.FileName,
+			"storage_path": fileAnalysis.StoragePath,
+			"mime_type":    fileAnalysis.MimeType,
+			"file_size":    fileAnalysis.FileSize,
+			"uploaded_at":  fileAnalysis.UploadedAt,
 		})
+
+		log.Printf("✅ File uploaded successfully: %s (ID: %s)", file.Filename, fileAnalysis.ID.String())
 	}
 
-	// 6. Save metadata to database
-	fileAnalysis := &models.FileAnalysis{
-		ID:          fileID,
-		FileName:    file.Filename,
-		StoragePath: storagePath,
-		MimeType:    mimeType,
-		FileSize:    file.Size,
-	}
-
-	if err := ctrl.repository.Create(fileAnalysis); err != nil {
-		log.Printf("⚠️  Failed to save file metadata to database: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to save file metadata",
-		})
-	}
-
-	// 7. Build response
+	// 6. Build response
 	response := fiber.Map{
-		"file_id":      fileAnalysis.ID.String(),
-		"file_name":    fileAnalysis.FileName,
-		"storage_path": fileAnalysis.StoragePath,
-		"mime_type":    fileAnalysis.MimeType,
-		"file_size":    fileAnalysis.FileSize,
-		"uploaded_at":  fileAnalysis.UploadedAt,
+		"success":        len(uploadedFiles),
+		"failed":         len(failedFiles),
+		"total":          len(files),
+		"uploaded_files": uploadedFiles,
 	}
 
-	log.Printf("✅ File uploaded successfully: %s (ID: %s)", file.Filename, fileAnalysis.ID.String())
+	// Include failed files info if any
+	if len(failedFiles) > 0 {
+		response["failed_files"] = failedFiles
+	}
+
+	// Return appropriate status code
+	if len(uploadedFiles) == 0 {
+		return c.Status(fiber.StatusInternalServerError).JSON(response)
+	}
+
+	if len(failedFiles) > 0 {
+		return c.Status(fiber.StatusPartialContent).JSON(response)
+	}
+
 	return c.Status(fiber.StatusOK).JSON(response)
 }
 
@@ -169,19 +220,17 @@ func (ctrl *FileController) buildFileHistoryResponse(files []models.FileAnalysis
 	}
 }
 
-// ReanalyzeFile handles POST /api/file/:file_id/reanalyze endpoint
-// This is a placeholder for future implementation
-func (ctrl *FileController) ReanalyzeFile(c *fiber.Ctx) error {
-	fileID := c.Params("file_id")
-	if fileID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "file_id is required",
+// DeleteAllFiles handles DELETE /api/file/uploads endpoint
+func (ctrl *FileController) DeleteAllFiles(c *fiber.Ctx) error {
+	// Delete all file records from database
+	if err := ctrl.repository.DeleteAll(); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to delete file records",
 		})
 	}
 
-	// TODO: Implement re-analysis from stored files
-	return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
-		"error": "re-analysis feature not yet implemented",
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "All file records deleted successfully",
 	})
 }
 

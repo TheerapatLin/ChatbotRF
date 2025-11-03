@@ -99,6 +99,11 @@ func (r *FileAnalysisRepository) Delete(id uuid.UUID) error {
 	return r.db.Delete(&models.FileAnalysis{}, "id = ?", id).Error
 }
 
+// DeleteAll removes all file analysis records from the database
+func (r *FileAnalysisRepository) DeleteAll() error {
+	return r.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.FileAnalysis{}).Error
+}
+
 // GetRecentAnalyses retrieves the most recent file uploads
 func (r *FileAnalysisRepository) GetRecentAnalyses(limit int) ([]models.FileAnalysis, error) {
 	var analyses []models.FileAnalysis
