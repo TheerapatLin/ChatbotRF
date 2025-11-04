@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"log"
+
 	"chatbot/config"
 	"chatbot/controllers"
 	"chatbot/repositories"
@@ -24,12 +26,25 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	contextService := services.NewContextService(messageRepo, fileAnalysisRepo)
 	fileService := services.NewFileService(openaiService.GetClient(), contextService)
 
+	// Initialize Bedrock service
+	bedrockService, err := services.NewBedrockService(cfg)
+	if err != nil {
+		log.Printf("⚠️ Warning: Failed to initialize Bedrock service: %v", err)
+		log.Printf("   Bedrock endpoints will not be available")
+	}
+
 	// Initialize controllers
 	chatCtrl := controllers.NewChatController(messageRepo, personaRepo, fileAnalysisRepo, openaiService)
 	personaCtrl := controllers.NewPersonaController(personaRepo, messageRepo)
 	audioCtrl := controllers.NewAudioController(openaiService, ttsService)
 	wsCtrl := controllers.NewWebSocketController(messageRepo, personaRepo, fileAnalysisRepo, openaiService)
 	fileCtrl := controllers.NewFileController(fileService, fileAnalysisRepo, messageRepo)
+
+	// Initialize Bedrock controller
+	var bedrockCtrl *controllers.BedrockController
+	if bedrockService != nil {
+		bedrockCtrl = controllers.NewBedrockController(bedrockService, personaRepo, messageRepo, contextService, fileAnalysisRepo)
+	}
 
 	// API group
 	api := app.Group("/api")
@@ -47,10 +62,15 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	api.Get("/personas", personaCtrl.GetAllPersonas)
 	api.Get("/personas/:id", personaCtrl.GetPersonaByID)
 
-	// Chat endpoints
+	// Chat endpoints (OpenAI)
 	api.Post("/chat", chatCtrl.HandleChat)
 	api.Get("/chats", chatCtrl.GetChatHistory)
 	api.Delete("/chats", chatCtrl.DeleteAllMessages)
+
+	// Bedrock endpoints (AWS Bedrock)
+	if bedrockCtrl != nil {
+		api.Post("/chat/bedrock", bedrockCtrl.SendBedrockMessage)
+	}
 
 	// Audio endpoints
 	api.Post("/audio/transcribe", audioCtrl.TranscribeAudio)

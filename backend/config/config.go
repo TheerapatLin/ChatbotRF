@@ -29,6 +29,14 @@ type Config struct {
 
 	// Rate Limiting
 	RateLimitWindow string
+
+	// AWS Bedrock 
+	AWSAccessKeyID     string
+	AWSSecretAccessKey string
+	AWSRegion          string
+	BedrockModelID     string
+	BedrockMaxTokens   int
+	BedrockTemperature float64
 }
 
 var AppConfig *Config
@@ -53,6 +61,18 @@ func LoadConfig() *Config {
 		temperature = 0.7
 	}
 
+	// Parse Bedrock max tokens (default: 2000)
+	bedrockMaxTokens, err := strconv.Atoi(getEnv("BEDROCK_MAX_TOKENS", "2000"))
+	if err != nil {
+		bedrockMaxTokens = 2000
+	}
+
+	// Parse Bedrock temperature (default: 0.7)
+	bedrockTemperature, err := strconv.ParseFloat(getEnv("BEDROCK_TEMPERATURE", "0.7"), 64)
+	if err != nil {
+		bedrockTemperature = 0.7
+	}
+
 	config := &Config{
 		// Server
 		Port:    getEnv("PORT", "3000"),
@@ -73,6 +93,14 @@ func LoadConfig() *Config {
 
 		// Rate Limiting
 		RateLimitWindow: getEnv("RATE_LIMIT_WINDOW", "1m"),
+
+		// AWS Bedrock
+		AWSAccessKeyID:     getEnv("AWS_ACCESS_KEY_ID", ""),
+		AWSSecretAccessKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
+		AWSRegion:          getEnv("AWS_REGION", "ap-southeast-1"),
+		BedrockModelID:     getEnv("BEDROCK_MODEL_ID", "anthropic.claude-sonnet-4-5-20250929-v1:0"),
+		BedrockMaxTokens:   bedrockMaxTokens,
+		BedrockTemperature: bedrockTemperature,
 	}
 
 	// Validate required configs
