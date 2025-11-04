@@ -2,9 +2,11 @@ package controllers
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
+	"os"
 
 	"chatbot/models"
 	"chatbot/repositories"
@@ -144,27 +146,26 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 	// 5. Build context with history and files
 	var messages interface{}
 	if len(msg.FileIDs) > 0 {
-		// Use new function that supports images
-		openaiMessages, err := ctrl.contextService.BuildContextWithHistoryAndFiles(
-			msg.SessionID,
-			systemPrompt,
-			msg.Content,
-			10, // history limit
-			msg.FileIDs,
-		)
-		if err != nil {
-			log.Printf("⚠️  Failed to build context with files: %v", err)
-			// Fallback to simple messages
-			openaiMessages = []openai.ChatCompletionMessage{
-				{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
-				{Role: openai.ChatMessageRoleUser, Content: msg.Content},
-			}
-		}
-
-		// Convert to provider-specific format
 		if providerName == "Bedrock" {
-			messages = ctrl.convertToClaudeMessages(openaiMessages, systemPrompt)
+			// Bedrock: Build messages manually with file context
+			messages = ctrl.buildBedrockMessagesWithFiles(msg.SessionID, systemPrompt, msg.Content, msg.FileIDs)
 		} else {
+			// OpenAI: Use existing function that supports images
+			openaiMessages, err := ctrl.contextService.BuildContextWithHistoryAndFiles(
+				msg.SessionID,
+				systemPrompt,
+				msg.Content,
+				10, // history limit
+				msg.FileIDs,
+			)
+			if err != nil {
+				log.Printf("⚠️  Failed to build context with files: %v", err)
+				// Fallback to simple messages
+				openaiMessages = []openai.ChatCompletionMessage{
+					{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
+					{Role: openai.ChatMessageRoleUser, Content: msg.Content},
+				}
+			}
 			messages = openaiMessages
 		}
 	} else if msg.SessionID != "" {
@@ -386,4 +387,153 @@ func (ctrl *WebSocketController) ensureAlternatingMessages(messages []services.C
 	}
 
 	return messages
+}
+
+// isImageFile checks if a MIME type is an image
+func (ctrl *WebSocketController) isImageFile(mimeType string) bool {
+	switch mimeType {
+	case "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp":
+		return true
+	default:
+		return false
+	}
+}
+
+// readImageFile reads an image file and returns base64 encoded data
+func (ctrl *WebSocketController) readImageFile(filePath string, mimeType string) (string, string, error) {
+	fmt.Println(`filePath =>`, filePath)
+	// Read file
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Encode to base64
+	encoded := base64.StdEncoding.EncodeToString(data)
+
+	return encoded, mimeType, nil
+}
+
+// buildBedrockMessagesWithFiles builds Claude messages with file context (text files + images)
+func (ctrl *WebSocketController) buildBedrockMessagesWithFiles(
+	sessionID string,
+	systemPrompt string,
+	currentMessage string,
+	fileIDs []string,
+) []services.ClaudeMessage {
+	claudeMessages := make([]services.ClaudeMessage, 0)
+
+	// 1. Add conversation history
+	if sessionID != "" {
+		history, err := ctrl.messageRepo.GetRecentBySession(sessionID, 10)
+		if err == nil && len(history) > 0 {
+			for _, msg := range history {
+				role := "user"
+				if msg.Role == models.RoleAssistant {
+					role = "assistant"
+				}
+
+				// Skip empty messages
+				if msg.Content == "" {
+					continue
+				}
+
+				claudeMessages = append(claudeMessages, services.ClaudeMessage{
+					Role:    role,
+					Content: msg.Content,
+				})
+			}
+		}
+	}
+
+	// 2. Separate image files from text files
+	imageFileIDs := make([]string, 0)
+	textFileIDs := make([]string, 0)
+
+	for _, fileID := range fileIDs {
+		file, err := ctrl.fileAnalysisRepo.FindByID(fileID)
+		if err != nil {
+			log.Printf("⚠️  File not found: %s", fileID)
+			continue
+		}
+
+		if ctrl.isImageFile(file.MimeType) {
+			imageFileIDs = append(imageFileIDs, fileID)
+		} else {
+			textFileIDs = append(textFileIDs, fileID)
+		}
+	}
+
+	// 3. Build file context for text files
+	var fileContext string
+	if len(textFileIDs) > 0 {
+		var err error
+		fileContext, err = ctrl.contextService.BuildFileContext(textFileIDs)
+		if err != nil {
+			log.Printf("⚠️  Failed to build file context: %v", err)
+		}
+	}
+
+	// 4. Add current user message with file context
+	var userMessageContent string
+	if fileContext != "" {
+		userMessageContent = fileContext + "\n\n--- User Question ---\n" + currentMessage
+	} else {
+		userMessageContent = currentMessage
+	}
+
+	// 5. If there are images, create multimodal content blocks
+	if len(imageFileIDs) > 0 {
+		contentBlocks := make([]services.ClaudeContentBlock, 0)
+
+		// Add text content first
+		contentBlocks = append(contentBlocks, services.ClaudeContentBlock{
+			Type: "text",
+			Text: userMessageContent,
+		})
+
+		// Add image blocks
+		for _, fileID := range imageFileIDs {
+			file, err := ctrl.fileAnalysisRepo.FindByID(fileID)
+			if err != nil {
+				log.Printf("⚠️  File not found: %s", fileID)
+				continue
+			}
+
+			// Read image file and encode to base64
+			imageData, mediaType, err := ctrl.readImageFile(file.StoragePath, file.MimeType)
+			if err != nil {
+				log.Printf("⚠️  Failed to read image: %v", err)
+				continue
+			}
+
+			// Add image content block
+			contentBlocks = append(contentBlocks, services.ClaudeContentBlock{
+				Type: "image",
+				Source: &services.ClaudeImageSource{
+					Type:      "base64",
+					MediaType: mediaType,
+					Data:      imageData,
+				},
+			})
+
+			log.Printf("✓ Added image to content: %s (%s)", file.FileName, mediaType)
+		}
+
+		claudeMessages = append(claudeMessages, services.ClaudeMessage{
+			Role:    "user",
+			Content: contentBlocks,
+		})
+	} else {
+		// Simple text message
+		claudeMessages = append(claudeMessages, services.ClaudeMessage{
+			Role:    "user",
+			Content: userMessageContent,
+		})
+	}
+
+	// 6. Ensure alternating pattern and starts with user
+	claudeMessages = ctrl.ensureAlternatingMessages(claudeMessages)
+
+	return claudeMessages
 }

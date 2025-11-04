@@ -57,9 +57,24 @@ func NewBedrockService(cfg *config.Config) (*BedrockService, error) {
 // ========================================
 
 // ClaudeMessage represents a single message in the conversation
+// Content can be either string (simple text) or []ClaudeContentBlock (multimodal)
 type ClaudeMessage struct {
-	Role    string `json:"role"` // "user" or "assistant"
-	Content string `json:"content"`
+	Role    string      `json:"role"` // "user" or "assistant"
+	Content interface{} `json:"content"` // string or []ClaudeContentBlock
+}
+
+// ClaudeContentBlock represents a content block (text or image)
+type ClaudeContentBlock struct {
+	Type   string                `json:"type"` // "text" or "image"
+	Text   string                `json:"text,omitempty"`
+	Source *ClaudeImageSource    `json:"source,omitempty"`
+}
+
+// ClaudeImageSource represents an image source for Claude
+type ClaudeImageSource struct {
+	Type      string `json:"type"` // "base64"
+	MediaType string `json:"media_type"` // "image/jpeg", "image/png", etc.
+	Data      string `json:"data"` // base64 encoded image
 }
 
 // ClaudeRequest represents the request body for Claude on Bedrock

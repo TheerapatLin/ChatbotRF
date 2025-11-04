@@ -1,9 +1,11 @@
 package controllers
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"chatbot/models"
@@ -119,13 +121,41 @@ func (bc *BedrockController) SendBedrockMessage(c *fiber.Ctx) error {
 	// Build messages with history and file context
 	var messages []services.ClaudeMessage
 	var fileContext string
+	var hasImages bool
 
 	// Get file context if files provided
 	if len(req.FileIDs) > 0 {
-		var err error
-		fileContext, err = bc.contextService.BuildFileContext(req.FileIDs)
-		if err != nil {
-			log.Printf("⚠️ Failed to build file context: %v", err)
+		// Separate image files from text files
+		imageFileIDs := make([]string, 0)
+		textFileIDs := make([]string, 0)
+
+		for _, fileID := range req.FileIDs {
+			file, err := bc.fileAnalysisRepo.FindByID(fileID)
+			if err != nil {
+				log.Printf("⚠️ File not found: %s", fileID)
+				continue
+			}
+
+			if bc.isImageFile(file.MimeType) {
+				imageFileIDs = append(imageFileIDs, fileID)
+				hasImages = true
+			} else {
+				textFileIDs = append(textFileIDs, fileID)
+			}
+		}
+
+		// Build text file context (for non-image files)
+		if len(textFileIDs) > 0 {
+			var err error
+			fileContext, err = bc.contextService.BuildFileContext(textFileIDs)
+			if err != nil {
+				log.Printf("⚠️ Failed to build file context: %v", err)
+			}
+		}
+
+		// Store image file IDs for later multimodal processing
+		if hasImages {
+			log.Printf("📸 Found %d image files", len(imageFileIDs))
 		}
 	}
 
@@ -170,6 +200,11 @@ func (bc *BedrockController) SendBedrockMessage(c *fiber.Ctx) error {
 		} else {
 			messages = bc.bedrockService.BuildMessages(req.Message, systemPrompt)
 		}
+	}
+
+	// Convert to multimodal format if there are images
+	if hasImages && len(req.FileIDs) > 0 {
+		messages = bc.convertToMultimodalMessages(messages, req.FileIDs)
 	}
 
 	// Save user message to database
@@ -261,4 +296,102 @@ func (bc *BedrockController) SendBedrockMessage(c *fiber.Ctx) error {
 	response.Persona.Icon = persona.Icon
 
 	return c.JSON(response)
+}
+
+// isImageFile checks if a MIME type is an image
+func (bc *BedrockController) isImageFile(mimeType string) bool {
+	switch mimeType {
+	case "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp":
+		return true
+	default:
+		return false
+	}
+}
+
+// convertToMultimodalMessages converts Claude messages to support images
+// For the last user message, if there are image files, convert to multimodal content blocks
+func (bc *BedrockController) convertToMultimodalMessages(messages []services.ClaudeMessage, fileIDs []string) []services.ClaudeMessage {
+	if len(fileIDs) == 0 || len(messages) == 0 {
+		return messages
+	}
+
+	// Find the last user message
+	lastUserIdx := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			lastUserIdx = i
+			break
+		}
+	}
+
+	if lastUserIdx == -1 {
+		return messages
+	}
+
+	// Get image files from fileIDs
+	contentBlocks := make([]services.ClaudeContentBlock, 0)
+
+	// Add text content first
+	textContent, ok := messages[lastUserIdx].Content.(string)
+	if ok && textContent != "" {
+		contentBlocks = append(contentBlocks, services.ClaudeContentBlock{
+			Type: "text",
+			Text: textContent,
+		})
+	}
+
+	// Add image blocks
+	for _, fileID := range fileIDs {
+		file, err := bc.fileAnalysisRepo.FindByID(fileID)
+		if err != nil {
+			log.Printf("⚠️  File not found: %s", fileID)
+			continue
+		}
+
+		// Check if it's an image
+		if !bc.isImageFile(file.MimeType) {
+			continue
+		}
+
+		// Read image file and encode to base64
+		imageData, mediaType, err := bc.readImageFile(file.StoragePath, file.MimeType)
+		if err != nil {
+			log.Printf("⚠️  Failed to read image: %v", err)
+			continue
+		}
+
+		// Add image content block
+		contentBlocks = append(contentBlocks, services.ClaudeContentBlock{
+			Type: "image",
+			Source: &services.ClaudeImageSource{
+				Type:      "base64",
+				MediaType: mediaType,
+				Data:      imageData,
+			},
+		})
+
+		log.Printf("✓ Added image to content: %s (%s)", file.FileName, mediaType)
+	}
+
+	// If we have multiple content blocks (text + images), use multimodal format
+	if len(contentBlocks) > 1 {
+		messages[lastUserIdx].Content = contentBlocks
+		log.Printf("✓ Converted to multimodal message: %d blocks (%d images)", len(contentBlocks), len(contentBlocks)-1)
+	}
+
+	return messages
+}
+
+// readImageFile reads an image file and returns base64 encoded data
+func (bc *BedrockController) readImageFile(filePath string, mimeType string) (string, string, error) {
+	// Read file
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Encode to base64
+	encoded := base64.StdEncoding.EncodeToString(data)
+
+	return encoded, mimeType, nil
 }
