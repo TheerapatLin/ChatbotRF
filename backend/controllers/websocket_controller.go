@@ -115,12 +115,11 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 		return fmt.Errorf("persona with ID %d not found", personaID)
 	}
 
-	// 3. Determine system prompt (custom prompt takes precedence over persona prompt)
+	// 3. Determine system prompt (append custom prompt to persona's base prompt)
 	systemPrompt := persona.SystemPrompt
 	if msg.SystemPrompt != "" {
-		// Use custom system prompt from frontend
-		// Append to persona's base prompt for context
-		systemPrompt = persona.SystemPrompt + "\n\nAdditional instructions: " + msg.SystemPrompt
+		// Append custom system_prompt to persona's prompt (don't replace!)
+		systemPrompt = systemPrompt + "\n\n--- Additional Instructions ---\n" + msg.SystemPrompt
 	}
 
 	// 4. Build context with history and files

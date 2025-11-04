@@ -158,9 +158,12 @@ func (ctrl *ChatController) getPersonaInfo(req *ChatRequest) (string, *PersonaIn
 		return "", nil, fmt.Errorf("persona with ID %d not found", *req.PersonaID)
 	}
 
-	systemPrompt := req.SystemPrompt
-	if systemPrompt == "" {
-		systemPrompt = persona.SystemPrompt
+	// Start with persona's system prompt
+	systemPrompt := persona.SystemPrompt
+
+	// Append custom system_prompt if provided (don't replace!)
+	if req.SystemPrompt != "" {
+		systemPrompt = systemPrompt + "\n\n--- Additional Instructions ---\n" + req.SystemPrompt
 	}
 
 	personaInfo := &PersonaInfo{
