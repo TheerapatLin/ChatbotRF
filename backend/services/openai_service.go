@@ -208,3 +208,113 @@ func (s *OpenAIService) CreateStreamingChatCompletion(
 func (s *OpenAIService) GetClient() *openai.Client {
 	return s.client
 }
+
+// ========================================
+// Streaming Interface Implementation
+// ========================================
+
+// OpenAIStreamReader implements StreamReader interface for OpenAI streaming
+type OpenAIStreamReader struct {
+	stream *openai.ChatCompletionStream
+	closed bool
+}
+
+// CreateStreamingChat implements StreamingChatService interface
+func (s *OpenAIService) CreateStreamingChat(ctx context.Context, req StreamingChatRequest) (StreamReader, error) {
+	// Convert messages to OpenAI format
+	var messages []openai.ChatCompletionMessage
+	switch v := req.Messages.(type) {
+	case []openai.ChatCompletionMessage:
+		messages = v
+	default:
+		return nil, fmt.Errorf("unsupported message type for OpenAI")
+	}
+
+	// Use defaults if not specified
+	temperature := float32(req.Temperature)
+	if temperature == 0 {
+		temperature = float32(s.config.OpenAITemperature)
+		if temperature == 0 {
+			temperature = 0.7
+		}
+	}
+
+	maxTokens := req.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = s.config.OpenAIMaxTokens
+		if maxTokens == 0 {
+			maxTokens = 2000
+		}
+	}
+
+	model := req.Model
+	if model == "" {
+		model = s.config.OpenAIModel
+		if model == "" {
+			model = "gpt-4o-mini"
+		}
+	}
+
+	// Create streaming request
+	stream, err := s.client.CreateChatCompletionStream(
+		ctx,
+		openai.ChatCompletionRequest{
+			Model:       model,
+			Messages:    messages,
+			Temperature: temperature,
+			MaxTokens:   maxTokens,
+			Stream:      true,
+		},
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create streaming: %w", err)
+	}
+
+	return &OpenAIStreamReader{
+		stream: stream,
+		closed: false,
+	}, nil
+}
+
+// Recv receives the next chunk from the OpenAI stream
+func (r *OpenAIStreamReader) Recv() (string, error) {
+	if r.closed {
+		return "", io.EOF
+	}
+
+	response, err := r.stream.Recv()
+	if err == io.EOF {
+		return "", io.EOF
+	}
+	if err != nil {
+		return "", err
+	}
+
+	// Get delta content
+	if len(response.Choices) > 0 {
+		delta := response.Choices[0].Delta.Content
+		return delta, nil
+	}
+
+	return "", nil
+}
+
+// Close closes the OpenAI stream
+func (r *OpenAIStreamReader) Close() error {
+	r.closed = true
+	if r.stream != nil {
+		r.stream.Close()
+	}
+	return nil
+}
+
+// GetProviderName returns "openai"
+func (s *OpenAIService) GetProviderName() string {
+	return "openai"
+}
+
+// IsAvailable checks if OpenAI service is configured and ready
+func (s *OpenAIService) IsAvailable() bool {
+	return s.client != nil && s.config.OpenAIAPIKey != ""
+}

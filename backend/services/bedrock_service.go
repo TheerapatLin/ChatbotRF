@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 
 	"chatbot/config"
@@ -12,6 +13,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 )
 
 // BedrockService handles AWS Bedrock API interactions
@@ -218,4 +220,147 @@ func (s *BedrockService) BuildMessagesWithContext(
 			Content: fullMessage,
 		},
 	}
+}
+
+// ========================================
+// Streaming Support for WebSocket
+// ========================================
+
+// BedrockStreamReader implements StreamReader interface for Bedrock streaming
+type BedrockStreamReader struct {
+	stream *bedrockruntime.InvokeModelWithResponseStreamEventStream
+	ctx    context.Context
+	closed bool
+}
+
+// CreateStreamingChat implements StreamingChatService interface
+func (s *BedrockService) CreateStreamingChat(ctx context.Context, req StreamingChatRequest) (StreamReader, error) {
+	// Convert messages to Claude format
+	var messages []ClaudeMessage
+	switch v := req.Messages.(type) {
+	case []ClaudeMessage:
+		messages = v
+	default:
+		return nil, fmt.Errorf("unsupported message type for Bedrock")
+	}
+
+	// Use defaults if not specified
+	temperature := req.Temperature
+	if temperature == 0 {
+		temperature = s.config.BedrockTemperature
+	}
+
+	maxTokens := req.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = s.config.BedrockMaxTokens
+	}
+
+	modelID := req.Model
+	if modelID == "" {
+		modelID = s.config.BedrockModelID
+	}
+
+	// Build Claude request
+	claudeReq := ClaudeRequest{
+		AnthropicVersion: "bedrock-2023-05-31",
+		MaxTokens:        maxTokens,
+		Messages:         messages,
+		Temperature:      temperature,
+		SystemPrompt:     req.SystemPrompt,
+	}
+
+	requestBody, err := json.Marshal(claudeReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	log.Printf("🔵 Bedrock Streaming Request: model=%s, messages=%d, max_tokens=%d",
+		modelID, len(messages), maxTokens)
+
+	// Call Bedrock streaming API
+	output, err := s.client.InvokeModelWithResponseStream(
+		ctx,
+		&bedrockruntime.InvokeModelWithResponseStreamInput{
+			ModelId:     aws.String(modelID),
+			ContentType: aws.String("application/json"),
+			Accept:      aws.String("application/json"),
+			Body:        requestBody,
+		},
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to invoke streaming: %w", err)
+	}
+
+	return &BedrockStreamReader{
+		stream: output.GetStream(),
+		ctx:    ctx,
+		closed: false,
+	}, nil
+}
+
+// Recv receives the next chunk from the Bedrock stream
+func (r *BedrockStreamReader) Recv() (string, error) {
+	if r.closed {
+		return "", io.EOF
+	}
+
+	for {
+		select {
+		case <-r.ctx.Done():
+			return "", r.ctx.Err()
+
+		case event, ok := <-r.stream.Events():
+			if !ok {
+				return "", io.EOF
+			}
+
+			switch v := event.(type) {
+			case *types.ResponseStreamMemberChunk:
+				// Parse the chunk data
+				var chunkData struct {
+					Type  string `json:"type"`
+					Index int    `json:"index"`
+					Delta struct {
+						Type string `json:"type"`
+						Text string `json:"text"`
+					} `json:"delta"`
+				}
+
+				if err := json.Unmarshal(v.Value.Bytes, &chunkData); err != nil {
+					log.Printf("⚠️ Failed to unmarshal chunk: %v", err)
+					continue
+				}
+
+				// Return the text content if available
+				if chunkData.Delta.Text != "" {
+					return chunkData.Delta.Text, nil
+				}
+
+				// If no text, continue to next event
+				continue
+
+			default:
+				// Unknown event type or stream end, check if it's end
+				// Most streams end with an empty event
+				continue
+			}
+		}
+	}
+}
+
+// Close closes the Bedrock stream
+func (r *BedrockStreamReader) Close() error {
+	r.closed = true
+	return nil
+}
+
+// GetProviderName returns "bedrock"
+func (s *BedrockService) GetProviderName() string {
+	return "bedrock"
+}
+
+// IsAvailable checks if Bedrock service is configured and ready
+func (s *BedrockService) IsAvailable() bool {
+	return s.client != nil && s.config.AWSAccessKeyID != "" && s.config.AWSSecretAccessKey != ""
 }

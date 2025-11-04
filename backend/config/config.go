@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -11,17 +12,17 @@ import (
 // Config holds all application configuration
 type Config struct {
 	// Server
-	Port   string
-	AppEnv string
+	Port    string
+	AppEnv  string
 	AppName string
 
 	// Database
 	DatabaseURL string
 
 	// OpenAI
-	OpenAIAPIKey     string
-	OpenAIModel      string
-	OpenAIMaxTokens  int
+	OpenAIAPIKey      string
+	OpenAIModel       string
+	OpenAIMaxTokens   int
 	OpenAITemperature float64
 
 	// CORS
@@ -30,7 +31,7 @@ type Config struct {
 	// Rate Limiting
 	RateLimitWindow string
 
-	// AWS Bedrock 
+	// AWS Bedrock
 	AWSAccessKeyID     string
 	AWSSecretAccessKey string
 	AWSRegion          string
@@ -109,7 +110,7 @@ func LoadConfig() *Config {
 	}
 
 	if config.OpenAIAPIKey == "" {
-		log.Fatal("OPENAI_API_KEY is required in .env.development")
+		fmt.Println("OPENAI_API_KEY is required in .env.development")
 	}
 
 	AppConfig = config

@@ -20,6 +20,7 @@ type WebSocketController struct {
 	personaRepo      *repositories.PersonaRepository
 	fileAnalysisRepo *repositories.FileAnalysisRepository
 	openaiService    *services.OpenAIService
+	bedrockService   *services.BedrockService
 	contextService   *services.ContextService
 }
 
@@ -29,12 +30,14 @@ func NewWebSocketController(
 	personaRepo *repositories.PersonaRepository,
 	fileAnalysisRepo *repositories.FileAnalysisRepository,
 	openaiService *services.OpenAIService,
+	bedrockService *services.BedrockService,
 ) *WebSocketController {
 	return &WebSocketController{
 		messageRepo:      messageRepo,
 		personaRepo:      personaRepo,
 		fileAnalysisRepo: fileAnalysisRepo,
 		openaiService:    openaiService,
+		bedrockService:   bedrockService,
 		contextService:   services.NewContextService(messageRepo, fileAnalysisRepo),
 	}
 }
@@ -122,11 +125,27 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 		systemPrompt = systemPrompt + "\n\n--- Additional Instructions ---\n" + msg.SystemPrompt
 	}
 
-	// 4. Build context with history and files
-	var messages []openai.ChatCompletionMessage
+	// 4. Determine which AI provider to use (auto-detection)
+	var streamingService services.StreamingChatService
+	var providerName string
+
+	if ctrl.openaiService != nil && ctrl.openaiService.IsAvailable() {
+		streamingService = ctrl.openaiService
+		providerName = "OpenAI"
+		log.Printf("🟢 Using OpenAI for WebSocket streaming")
+	} else if ctrl.bedrockService != nil && ctrl.bedrockService.IsAvailable() {
+		streamingService = ctrl.bedrockService
+		providerName = "Bedrock"
+		log.Printf("🔵 Using AWS Bedrock for WebSocket streaming")
+	} else {
+		return fmt.Errorf("no AI provider available (check OPENAI_API_KEY or AWS credentials in .env)")
+	}
+
+	// 5. Build context with history and files
+	var messages interface{}
 	if len(msg.FileIDs) > 0 {
 		// Use new function that supports images
-		messages, err = ctrl.contextService.BuildContextWithHistoryAndFiles(
+		openaiMessages, err := ctrl.contextService.BuildContextWithHistoryAndFiles(
 			msg.SessionID,
 			systemPrompt,
 			msg.Content,
@@ -136,14 +155,21 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 		if err != nil {
 			log.Printf("⚠️  Failed to build context with files: %v", err)
 			// Fallback to simple messages
-			messages = []openai.ChatCompletionMessage{
+			openaiMessages = []openai.ChatCompletionMessage{
 				{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
 				{Role: openai.ChatMessageRoleUser, Content: msg.Content},
 			}
 		}
+
+		// Convert to provider-specific format
+		if providerName == "Bedrock" {
+			messages = ctrl.convertToClaudeMessages(openaiMessages, systemPrompt)
+		} else {
+			messages = openaiMessages
+		}
 	} else if msg.SessionID != "" {
 		// Use context service to build messages with history only
-		messages, err = ctrl.contextService.BuildContextWithHistory(
+		openaiMessages, err := ctrl.contextService.BuildContextWithHistory(
 			msg.SessionID,
 			systemPrompt,
 			msg.Content,
@@ -152,29 +178,47 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 		if err != nil {
 			log.Printf("⚠️  Failed to build context with history: %v", err)
 			// Fallback to simple messages
+			openaiMessages = []openai.ChatCompletionMessage{
+				{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
+				{Role: openai.ChatMessageRoleUser, Content: msg.Content},
+			}
+		}
+
+		// Convert to provider-specific format
+		if providerName == "Bedrock" {
+			messages = ctrl.convertToClaudeMessages(openaiMessages, systemPrompt)
+		} else {
+			messages = openaiMessages
+		}
+	} else {
+		// No session and no files - simple messages
+		if providerName == "Bedrock" {
+			messages = []services.ClaudeMessage{
+				{Role: "user", Content: msg.Content},
+			}
+		} else {
 			messages = []openai.ChatCompletionMessage{
 				{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
 				{Role: openai.ChatMessageRoleUser, Content: msg.Content},
 			}
 		}
-	} else {
-		// No session and no files - simple messages
-		messages = []openai.ChatCompletionMessage{
-			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
-			{Role: openai.ChatMessageRoleUser, Content: msg.Content},
-		}
 	}
 
-	fmt.Println(`messages => `, messages)
+	// 6. Create streaming request using unified interface
+	streamReq := services.StreamingChatRequest{
+		Messages:     messages,
+		SystemPrompt: systemPrompt,
+		Temperature:  0.7,
+		MaxTokens:    2000,
+	}
 
-	// 5. Call OpenAI streaming API
-	stream, err := ctrl.openaiService.CreateStreamingChatCompletion(ctx, messages)
+	stream, err := streamingService.CreateStreamingChat(ctx, streamReq)
 	if err != nil {
 		return fmt.Errorf("failed to create streaming request: %w", err)
 	}
 	defer stream.Close()
 
-	// 6. Stream the response to client
+	// 7. Stream the response to client
 	fullContent := ""
 
 	for {
@@ -184,7 +228,7 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 			return nil
 
 		default:
-			response, err := stream.Recv()
+			chunk, err := stream.Recv()
 			if err == io.EOF {
 				// Stream completed
 				goto streamDone
@@ -193,16 +237,13 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 				return fmt.Errorf("stream error: %w", err)
 			}
 
-			// Get delta content
-			if len(response.Choices) > 0 {
-				delta := response.Choices[0].Delta.Content
-				if delta != "" {
-					fullContent += delta
+			// Add chunk to full content
+			if chunk != "" {
+				fullContent += chunk
 
-					// Send chunk to client
-					if err := ctrl.sendChunk(c, delta, false); err != nil {
-						return err
-					}
+				// Send chunk to client
+				if err := ctrl.sendChunk(c, chunk, false); err != nil {
+					return err
 				}
 			}
 		}
@@ -272,4 +313,77 @@ func (ctrl *WebSocketController) sendError(c *websocket.Conn, errorMsg string) e
 		"type":  "error",
 		"error": errorMsg,
 	})
+}
+
+// convertToClaudeMessages converts OpenAI messages to Claude message format
+// Claude uses separate system prompt field, so we filter out system messages
+// Claude also requires alternating user/assistant messages, so we merge consecutive messages
+func (ctrl *WebSocketController) convertToClaudeMessages(openaiMessages []openai.ChatCompletionMessage, systemPrompt string) []services.ClaudeMessage {
+	claudeMessages := make([]services.ClaudeMessage, 0)
+	var lastRole string
+	var accumulatedContent string
+
+	for _, msg := range openaiMessages {
+		// Skip system messages (they're passed separately in systemPrompt)
+		if msg.Role == openai.ChatMessageRoleSystem {
+			continue
+		}
+
+		// Skip messages with empty content
+		if msg.Content == "" {
+			continue
+		}
+
+		// Convert role
+		role := "user"
+		if msg.Role == openai.ChatMessageRoleAssistant {
+			role = "assistant"
+		}
+
+		// If same role as last message, merge content
+		if lastRole == role {
+			accumulatedContent += "\n\n" + msg.Content
+		} else {
+			// Save previous accumulated message
+			if accumulatedContent != "" {
+				claudeMessages = append(claudeMessages, services.ClaudeMessage{
+					Role:    lastRole,
+					Content: accumulatedContent,
+				})
+			}
+
+			// Start new message
+			lastRole = role
+			accumulatedContent = msg.Content
+		}
+	}
+
+	// Add final accumulated message
+	if accumulatedContent != "" {
+		claudeMessages = append(claudeMessages, services.ClaudeMessage{
+			Role:    lastRole,
+			Content: accumulatedContent,
+		})
+	}
+
+	// Ensure alternating pattern and starts with user
+	claudeMessages = ctrl.ensureAlternatingMessages(claudeMessages)
+
+	return claudeMessages
+}
+
+// ensureAlternatingMessages ensures messages alternate between user and assistant
+// Claude API requires this pattern
+func (ctrl *WebSocketController) ensureAlternatingMessages(messages []services.ClaudeMessage) []services.ClaudeMessage {
+	if len(messages) == 0 {
+		return messages
+	}
+
+	// Must start with user message
+	if messages[0].Role != "user" {
+		log.Printf("⚠️  First message is not 'user', prepending empty user message")
+		messages = append([]services.ClaudeMessage{{Role: "user", Content: "[conversation started]"}}, messages...)
+	}
+
+	return messages
 }
