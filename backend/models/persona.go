@@ -27,9 +27,9 @@ type Persona struct {
 	Name           string     `gorm:"type:varchar(100);not null;unique" json:"name"`
 	Description    string     `gorm:"type:text" json:"description"`
 	SystemPrompt   string     `gorm:"type:text;not null" json:"system_prompt"`
-	Tone           string     `gorm:"type:varchar(50)" json:"tone"`              // e.g., "friendly", "professional", "empathetic"
-	Style          string     `gorm:"type:varchar(50)" json:"style"`             // e.g., "concise", "detailed", "conversational"
-	Expertise      string     `gorm:"type:varchar(100)" json:"expertise"`        // e.g., "technology", "healthcare", "education"
+	Tone           string     `gorm:"type:varchar(200)" json:"tone"`              // e.g., "friendly", "professional", "empathetic"
+	Style          string     `gorm:"type:varchar(500)" json:"style"`             // e.g., "concise", "detailed", "conversational"
+	Expertise      string     `gorm:"type:varchar(500)" json:"expertise"`        // e.g., "technology", "healthcare", "education"
 	Temperature    float32    `gorm:"type:decimal(3,2);default:0.7" json:"temperature"` // 0.0 - 2.0
 	MaxTokens      int        `gorm:"default:2000" json:"max_tokens"`
 	Model          string     `gorm:"type:varchar(50);default:'gpt-4o-mini'" json:"model"` // e.g., "gpt-4o-mini", "gpt-4"

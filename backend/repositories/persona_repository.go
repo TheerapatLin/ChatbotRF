@@ -38,3 +38,18 @@ func (r *PersonaRepository) FindByID(id int) (*models.Persona, error) {
 	}
 	return &persona, nil
 }
+
+// Create creates a new persona
+func (r *PersonaRepository) Create(persona *models.Persona) error {
+	return r.db.Create(persona).Error
+}
+
+// Update updates an existing persona
+func (r *PersonaRepository) Update(persona *models.Persona) error {
+	return r.db.Save(persona).Error
+}
+
+// Delete deletes a persona by ID
+func (r *PersonaRepository) Delete(id int) error {
+	return r.db.Delete(&models.Persona{}, "id = ?", id).Error
+}

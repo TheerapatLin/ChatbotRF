@@ -109,3 +109,8 @@ func (r *MessageRepository) DeleteSession(sessionID string) error {
 func (r *MessageRepository) DeleteAll() error {
 	return r.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.Message{}).Error
 }
+
+// DeleteByPersonaID removes all messages associated with a specific persona
+func (r *MessageRepository) DeleteByPersonaID(personaID int) error {
+	return r.db.Where("persona_id = ?", personaID).Delete(&models.Message{}).Error
+}
