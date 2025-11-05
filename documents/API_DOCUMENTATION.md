@@ -1,6 +1,6 @@
 # ChatBot API Documentation
 
-**Version:** 6.4 (2025-11-05)
+**Version:** 6.5 (2025-11-05)
 **Base URL:** `http://localhost:3001`
 
 ---
@@ -438,7 +438,71 @@ GET /api/chats?limit=50&offset=0
 }
 ```
 
-### 2.5 Delete All Messages
+### 2.5 Get Chat History by Session
+```
+GET /api/chats/session/:sessionId?limit=50&offset=0
+```
+
+**Description:** Get all messages for a specific session ID with pagination support.
+
+**URL Parameters:**
+- `sessionId` (string, required) - Session ID to filter messages
+
+**Query Parameters:**
+- `limit` (integer, optional, default: 50, max: 100) - Number of messages per page
+- `offset` (integer, optional, default: 0) - Number of messages to skip
+
+**Response (200 OK):**
+```json
+{
+  "messages": [{
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "role": "user",
+    "content": "สวัสดีครับ",
+    "persona_id": 1,
+    "created_at": "2025-11-05T10:30:00Z"
+  }, {
+    "id": "660e8400-e29b-41d4-a716-446655440001",
+    "role": "assistant",
+    "content": "สวัสดีค่ะ มีอะไรให้ช่วยไหมคะ",
+    "persona_id": 1,
+    "created_at": "2025-11-05T10:30:05Z"
+  }],
+  "total": 25,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+**Error Responses:**
+```json
+// 400 Bad Request - Missing session ID
+{
+  "error": "Session ID is required"
+}
+
+// 500 Internal Server Error
+{
+  "error": "Failed to retrieve chat history for session"
+}
+```
+
+**Example Usage:**
+```bash
+# Get first 50 messages for session_123
+curl http://localhost:3001/api/chats/session/session_123
+
+# Get messages 10-20
+curl "http://localhost:3001/api/chats/session/session_123?limit=10&offset=10"
+```
+
+**Features:**
+- ✅ Filter messages by session ID
+- ✅ Pagination support
+- ✅ Returns messages in chronological order
+- ✅ Includes all message metadata (persona_id, tokens_used, etc.)
+
+### 2.6 Delete All Messages
 ```
 DELETE /api/chats
 ```
@@ -851,6 +915,12 @@ ws.onmessage = (event) => {
 ---
 
 ## 📌 Version History
+
+### v6.5 (2025-11-05) - Chat History by Session
+✅ GET /api/chats/session/:sessionId - Get messages filtered by session ID
+✅ Pagination support for session-specific messages
+✅ Returns messages in chronological order
+✅ Includes full message metadata (persona_id, tokens_used, created_at)
 
 ### v6.4 (2025-11-05) - ElevenLabs TTS Integration
 ✅ POST /audio/elevenlabs/tts - Text-to-Speech with ElevenLabs

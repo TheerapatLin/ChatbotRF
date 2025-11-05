@@ -70,6 +70,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	// Chat endpoints (OpenAI)
 	api.Post("/chat", chatCtrl.HandleChat)
 	api.Get("/chats", chatCtrl.GetChatHistory)
+	api.Get("/chats/session/:sessionId", chatCtrl.GetChatHistoryBySession)
 	api.Delete("/chats", chatCtrl.DeleteAllMessages)
 
 	// Bedrock endpoints (AWS Bedrock)

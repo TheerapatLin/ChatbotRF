@@ -78,6 +78,7 @@ type MessageHistoryItem struct {
 	Role      string    `json:"role"`
 	Content   string    `json:"content"`
 	PersonaID *int      `json:"persona_id,omitempty"`
+	SessionID string    `json:"session_id,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -351,6 +352,7 @@ func (ctrl *ChatController) GetChatHistory(c *fiber.Ctx) error {
 			Role:      string(msg.Role),
 			Content:   msg.Content,
 			PersonaID: msg.PersonaID,
+			SessionID: msg.SessionID,
 			CreatedAt: msg.CreatedAt,
 		}
 	}
@@ -378,4 +380,74 @@ func (ctrl *ChatController) DeleteAllMessages(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "All messages deleted successfully",
 	})
+}
+
+// GetChatHistoryBySession handles GET /api/chats/session/:sessionId endpoint
+func (ctrl *ChatController) GetChatHistoryBySession(c *fiber.Ctx) error {
+	// Get session ID from URL parameter
+	sessionID := c.Params("sessionId")
+	if sessionID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Session ID is required",
+		})
+	}
+
+	// Parse and validate pagination
+	limit := c.QueryInt("limit", 50)
+	offset := c.QueryInt("offset", 0)
+
+	// Validate pagination
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Get messages by session ID from repository
+	messages, err := ctrl.messageRepo.GetAllBySession(sessionID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to retrieve chat history for session",
+		})
+	}
+
+	// Apply pagination manually
+	total := int64(len(messages))
+	start := offset
+	end := offset + limit
+
+	if start > len(messages) {
+		start = len(messages)
+	}
+	if end > len(messages) {
+		end = len(messages)
+	}
+
+	paginatedMessages := messages[start:end]
+
+	// Convert messages to response items
+	items := make([]MessageHistoryItem, len(paginatedMessages))
+	for i, msg := range paginatedMessages {
+		items[i] = MessageHistoryItem{
+			ID:        msg.ID.String(),
+			Role:      string(msg.Role),
+			Content:   msg.Content,
+			PersonaID: msg.PersonaID,
+			CreatedAt: msg.CreatedAt,
+		}
+	}
+
+	// Build response
+	response := ChatHistoryResponse{
+		Messages: items,
+		Total:    total,
+		Limit:    limit,
+		Offset:   offset,
+	}
+
+	return c.Status(fiber.StatusOK).JSON(response)
 }
