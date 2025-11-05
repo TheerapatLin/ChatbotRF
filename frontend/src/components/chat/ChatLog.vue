@@ -153,7 +153,9 @@ onUnmounted(() => {
   flex-direction: column;
   overflow: hidden;
   position: relative;
-  background: #f9fafb;
+  background: white;
+  height: 100%;
+  width: 100%;
 }
 
 .empty-state {
@@ -165,6 +167,7 @@ onUnmounted(() => {
   text-align: center;
   padding: 40px;
   color: #6b7280;
+  height: 100%;
 }
 
 .empty-icon {
@@ -189,8 +192,11 @@ onUnmounted(() => {
 .messages-container {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 20px;
   scroll-behavior: smooth;
+  height: 100%;
+  background: #f9fafb;
 }
 
 /* Scrollbar Styling */
