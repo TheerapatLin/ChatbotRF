@@ -30,6 +30,7 @@ type PersonaResponse struct {
 	ID              int     `json:"id"`
 	Name            string  `json:"name"`
 	Description     string  `json:"description"`
+	SystemPrompt    string  `json:"system_prompt"`
 	Tone            string  `json:"tone"`
 	Style           string  `json:"style"`
 	Expertise       string  `json:"expertise"`
@@ -390,4 +391,205 @@ func (ctrl *PersonaController) DeletePersona(c *fiber.Ctx) error {
 		"id":               id,
 		"messages_deleted": messageCount,
 	})
+}
+
+// UpdatePersona handles PATCH /api/persona/:id endpoint
+func (ctrl *PersonaController) UpdatePersona(c *fiber.Ctx) error {
+	// Parse ID from URL parameter
+	id, err := c.ParamsInt("id")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid persona ID",
+		})
+	}
+
+	// Check if persona exists
+	persona, err := ctrl.personaRepo.FindByID(id)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Persona not found",
+		})
+	}
+
+	// Parse request body (partial update)
+	type UpdatePersonaRequest struct {
+		Name            *string                 `json:"name"`
+		Description     *string                 `json:"description"`
+		SystemPrompt    *string                 `json:"system_prompt"`
+		Tone            *string                 `json:"tone"`
+		Style           *string                 `json:"style"`
+		Expertise       *string                 `json:"expertise"`
+		Temperature     *float32                `json:"temperature"`
+		MaxTokens       *int                    `json:"max_tokens"`
+		Model           *string                 `json:"model"`
+		LanguageSetting *LanguageSettingRequest `json:"language_setting"`
+		Guardrails      *GuardrailsRequest      `json:"guardrails"`
+		Icon            *string                 `json:"icon"`
+		IsActive        *bool                   `json:"is_active"`
+	}
+
+	var req UpdatePersonaRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Update only provided fields
+	if req.Name != nil {
+		if len(*req.Name) == 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Name cannot be empty",
+			})
+		}
+		if len(*req.Name) > 100 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Name must be less than 100 characters",
+			})
+		}
+		persona.Name = *req.Name
+	}
+
+	if req.Description != nil {
+		persona.Description = *req.Description
+	}
+
+	if req.SystemPrompt != nil {
+		if len(*req.SystemPrompt) == 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "System prompt cannot be empty",
+			})
+		}
+		persona.SystemPrompt = *req.SystemPrompt
+	}
+
+	if req.Tone != nil {
+		if len(*req.Tone) > 200 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Tone must be less than 200 characters",
+			})
+		}
+		persona.Tone = *req.Tone
+	}
+
+	if req.Style != nil {
+		if len(*req.Style) > 500 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Style must be less than 500 characters",
+			})
+		}
+		persona.Style = *req.Style
+	}
+
+	if req.Expertise != nil {
+		if len(*req.Expertise) > 500 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Expertise must be less than 500 characters",
+			})
+		}
+		persona.Expertise = *req.Expertise
+	}
+
+	if req.Temperature != nil {
+		if *req.Temperature < 0 || *req.Temperature > 2.0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Temperature must be between 0.0 and 2.0",
+			})
+		}
+		persona.Temperature = *req.Temperature
+	}
+
+	if req.MaxTokens != nil {
+		persona.MaxTokens = *req.MaxTokens
+	}
+
+	if req.Model != nil {
+		// Validate model name
+		validModels := map[string]bool{
+			"gpt-4o-mini":   true,
+			"gpt-4o":        true,
+			"gpt-4":         true,
+			"gpt-3.5-turbo": true,
+			"apac.anthropic.claude-sonnet-4-20250514-v1:0": true,
+			"claude-sonnet-4": true,
+			"claude-3-opus":   true,
+			"claude-3-sonnet": true,
+		}
+
+		if !validModels[*req.Model] {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":        "Invalid model name",
+				"valid_models": []string{"gpt-4o-mini", "gpt-4o", "gpt-4", "gpt-3.5-turbo", "claude-sonnet-4", "claude-3-opus", "claude-3-sonnet"},
+				"received":     *req.Model,
+			})
+		}
+		persona.Model = *req.Model
+	}
+
+	if req.Icon != nil {
+		if len(*req.Icon) > 10 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Icon must be less than 10 characters",
+			})
+		}
+		persona.Icon = *req.Icon
+	}
+
+	if req.IsActive != nil {
+		persona.IsActive = *req.IsActive
+	}
+
+	// Update language setting if provided
+	if req.LanguageSetting != nil {
+		languageSettingJSON, err := json.Marshal(req.LanguageSetting)
+		if err != nil {
+			log.Printf("❌ Failed to marshal language_setting: %v", err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to process language settings",
+			})
+		}
+		persona.LanguageSetting = string(languageSettingJSON)
+	}
+
+	// Update guardrails if provided
+	if req.Guardrails != nil {
+		guardrailsJSON, err := json.Marshal(req.Guardrails)
+		if err != nil {
+			log.Printf("❌ Failed to marshal guardrails: %v", err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to process guardrails",
+			})
+		}
+		persona.Guardrails = string(guardrailsJSON)
+	}
+
+	// Save to database
+	if err := ctrl.personaRepo.Update(persona); err != nil {
+		log.Printf("❌ Failed to update persona: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to update persona",
+		})
+	}
+
+	log.Printf("✅ Persona updated successfully: id=%d, name=%s", persona.ID, persona.Name)
+
+	// Return updated persona
+	response := PersonaResponse{
+		ID:              persona.ID,
+		Name:            persona.Name,
+		Description:     persona.Description,
+		SystemPrompt:    persona.SystemPrompt,
+		Tone:            persona.Tone,
+		Style:           persona.Style,
+		Expertise:       persona.Expertise,
+		Temperature:     persona.Temperature,
+		MaxTokens:       persona.MaxTokens,
+		Model:           persona.Model,
+		LanguageSetting: persona.LanguageSetting,
+		Guardrails:      persona.Guardrails,
+		Icon:            persona.Icon,
+		IsActive:        persona.IsActive,
+	}
+
+	return c.Status(fiber.StatusOK).JSON(response)
 }

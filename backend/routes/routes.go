@@ -62,6 +62,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	api.Get("/personas", personaCtrl.GetAllPersonas)
 	api.Get("/personas/:id", personaCtrl.GetPersonaByID)
 	api.Post("/persona", personaCtrl.CreatePersona)
+	api.Patch("/persona/:id", personaCtrl.UpdatePersona)
 	api.Delete("/persona/:id", personaCtrl.DeletePersona)
 
 	// Chat endpoints (OpenAI)

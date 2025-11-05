@@ -1,5 +1,6 @@
 # ChatBot API Documentation
 
+**Version:** 6.2 (2025-11-04)
 **Base URL:** `http://localhost:3001`
 
 ---
@@ -7,27 +8,54 @@
 ## 🚀 Quick Start
 
 ```bash
-# 1. ติดตั้ง dependencies
-cd backend && go mod download
-
-# 2. เริ่ม PostgreSQL
+# 1. Setup PostgreSQL
 docker-compose up -d
 
-# 3. ตั้งค่า .env.development
-OPENAI_API_KEY=your_key_here
-PORT=3001
-DATABASE_URL=postgres://chatbot_user:admin123@localhost:5432/chatbot_db
+# 2. Configure environment
+cp backend/.env.development backend/.env
+# Edit .env with your API keys
 
-# 4. รัน server
-go run main.go  # หรือ air (hot reload)
+# 3. Install dependencies
+cd backend && go mod download
+
+# 4. Run server
+go run main.go  # or use 'air' for hot reload
 ```
 
 ---
 
-## 📋 API Endpoints
+## 📋 Architecture
+
+**Pattern:** Repository-Service-Controller
+
+```
+Client Request
+    ↓
+Routes (routes.go)
+    ↓
+Controllers (business logic entry)
+    ↓
+Services (external API calls, business logic)
+    ↓
+Repositories (database operations)
+    ↓
+Database (PostgreSQL)
+```
+
+**Tech Stack:**
+- **Framework:** Go Fiber v2
+- **ORM:** GORM
+- **Database:** PostgreSQL 15
+- **AI Providers:** OpenAI GPT-4, AWS Bedrock Claude Sonnet 4
+- **WebSocket:** Fiber WebSocket adapter
+- **File Processing:** PDF/DOCX/XLSX extraction libraries
+
+---
+
+## 📚 API Endpoints
 
 ### Health Check
-```bash
+```
 GET /api/health
 ```
 
@@ -35,49 +63,271 @@ GET /api/health
 
 ## 1. 🤖 Personas API
 
-AI personalities ที่มี configuration ต่างกัน (8 personas)
+**Personas** = AI personalities with different configurations (tone, expertise, model)
 
-### 1.1 ดึงรายการ Personas
-```bash
+### List All Personas
+```
 GET /api/personas
 ```
 
 **Response:**
 ```json
 {
-  "personas": [
-    {
-      "id": 1,
-      "name": "General Assistant",
-      "description": "ผู้ช่วยอเนกประสงค์สำหรับคำถามทั่วไป",
-      "tone": "friendly",
-      "style": "conversational",
-      "expertise": "general",
-      "temperature": 0.7,
-      "max_tokens": 2000,
-      "model": "gpt-4o-mini",
-      "language_setting": "{\"default_language\":\"th\"}",
-      "guardrails": "{\"block_profanity\":true}",
-      "icon": "🤖",
-      "is_active": true
-    }
-  ]
+  "personas": [{
+    "id": 1,
+    "name": "General Assistant",
+    "description": "ผู้ช่วยอเนกประสงค์",
+    "tone": "friendly",
+    "style": "conversational",
+    "expertise": "general",
+    "temperature": 0.7,
+    "max_tokens": 2000,
+    "model": "gpt-4o-mini",
+    "icon": "🤖"
+  }]
 }
 ```
 
-### 1.2 ดึง Persona ตาม ID
-```bash
+### Get Persona by ID
+```
 GET /api/personas/:id
 ```
 
-**Response:** เหมือน 1.1 + สถิติการใช้งาน
+**Response:** Same as above + usage statistics
+
+---
+
+### Create New Persona
+```
+POST /api/personas
+```
+
+**Request:**
+```json
+{
+  "name": "Marketing Expert",
+  "description": "AI ผู้เชี่ยวชาญด้านการตลาด",
+  "system_prompt": "You are a marketing expert...",
+  "tone": "professional",
+  "style": "detailed",
+  "expertise": "marketing",
+  "temperature": 0.6,
+  "max_tokens": 2500,
+  "model": "gpt-4o-mini",
+  "language_setting": {
+    "default_language": "th",
+    "response_style": "formal",
+    "language_code": "th-TH"
+  },
+  "guardrails": {
+    "block_profanity": true,
+    "block_sensitive": false,
+    "allowed_topics": ["marketing", "business", "advertising"],
+    "blocked_topics": ["politics", "religion"],
+    "max_response_length": 3000,
+    "require_moderation": false
+  },
+  "icon": "📈"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "id": 9,
+  "name": "Marketing Expert",
+  "description": "AI ผู้เชี่ยวชาญด้านการตลาด",
+  "tone": "professional",
+  "style": "detailed",
+  "expertise": "marketing",
+  "temperature": 0.6,
+  "max_tokens": 2500,
+  "model": "gpt-4o-mini",
+  "language_setting": "{\"default_language\":\"th\",\"response_style\":\"formal\",\"language_code\":\"th-TH\"}",
+  "guardrails": "{\"block_profanity\":true,\"block_sensitive\":false,\"allowed_topics\":[\"marketing\",\"business\",\"advertising\"],\"blocked_topics\":[\"politics\",\"religion\"],\"max_response_length\":3000,\"require_moderation\":false}",
+  "icon": "📈",
+  "is_active": true
+}
+```
+
+**Field Details:**
+- `name` (required, max 100 chars) - Persona name
+- `description` (required) - Description
+- `system_prompt` (required) - AI instructions
+- `tone` (max 200 chars) - friendly/professional/empathetic (default: friendly)
+- `style` (max 500 chars) - conversational/detailed/concise (default: conversational)
+- `expertise` (max 500 chars) - general/technology/marketing/etc (default: general)
+- `temperature` (0.0-2.0) - AI creativity level (default: 0.7)
+- `max_tokens` - Response limit (default: 2000)
+- `model` - AI model (default: gpt-4o-mini)
+- `language_setting` - Language preferences (JSON object)
+- `guardrails` - Content filters and rules (JSON object)
+- `icon` (max 10 chars) - Emoji (default: 🤖)
+
+**Valid Models:**
+- OpenAI: `gpt-4o-mini`, `gpt-4o`, `gpt-4`, `gpt-3.5-turbo`
+- Claude: `claude-sonnet-4`, `claude-3-opus`, `claude-3-sonnet`
+- AWS Bedrock: `apac.anthropic.claude-sonnet-4-20250514-v1:0`
+
+**Validation Rules:**
+- Required fields must not be empty
+- Field length limits must be respected
+- Model name must be from valid models list
+- Temperature must be between 0.0 and 2.0
+
+**Note:** ID is auto-generated by database
+
+**Error Responses:**
+```json
+{
+  "error": "Invalid model name",
+  "valid_models": ["gpt-4o-mini", "gpt-4o", "gpt-4", "gpt-3.5-turbo", "claude-sonnet-4", "claude-3-opus", "claude-3-sonnet"],
+  "received": "invalid-model"
+}
+```
+
+---
+
+### Update Persona
+```
+PATCH /api/persona/:id
+```
+
+**URL Parameters:**
+- `id` (integer) - Persona ID to update
+
+**Request Body (Partial Update):**
+All fields are optional - only send fields you want to update
+```json
+{
+  "name": "Marketing Expert Pro",
+  "description": "ผู้เชี่ยวชาญด้านการตลาดดิจิทัล (อัพเดต)",
+  "system_prompt": "You are an advanced marketing expert...",
+  "tone": "professional",
+  "style": "analytical",
+  "expertise": "digital marketing, SEO, content strategy",
+  "temperature": 0.8,
+  "max_tokens": 3000,
+  "model": "gpt-4o",
+  "icon": "📊",
+  "is_active": true,
+  "language_setting": {
+    "default_language": "en",
+    "response_style": "formal",
+    "language_code": "en-US"
+  },
+  "guardrails": {
+    "block_profanity": false,
+    "block_sensitive": true,
+    "allowed_topics": ["marketing", "business", "analytics"],
+    "blocked_topics": [],
+    "max_response_length": 5000,
+    "require_moderation": false
+  }
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 9,
+  "name": "Marketing Expert Pro",
+  "description": "ผู้เชี่ยวชาญด้านการตลาดดิจิทัล (อัพเดต)",
+  "tone": "professional",
+  "style": "analytical",
+  "expertise": "digital marketing, SEO, content strategy",
+  "temperature": 0.8,
+  "max_tokens": 3000,
+  "model": "gpt-4o",
+  "language_setting": "{\"default_language\":\"en\",\"response_style\":\"formal\",\"language_code\":\"en-US\"}",
+  "guardrails": "{\"block_profanity\":false,\"block_sensitive\":true,...}",
+  "icon": "📊",
+  "is_active": true
+}
+```
+
+**Validation Rules:**
+- Same as Create Persona endpoint
+- Name: max 100 chars (cannot be empty if provided)
+- Tone: max 200 chars
+- Style: max 500 chars
+- Expertise: max 500 chars
+- Temperature: 0.0-2.0
+- Model: must be valid model name
+- Icon: max 10 chars
+- System prompt: cannot be empty if provided
+
+**Error Responses:**
+```json
+// 400 Bad Request - Invalid ID
+{
+  "error": "Invalid persona ID"
+}
+
+// 404 Not Found - Persona doesn't exist
+{
+  "error": "Persona not found"
+}
+
+// 400 Bad Request - Validation error
+{
+  "error": "Temperature must be between 0.0 and 2.0"
+}
+
+// 500 Internal Server Error
+{
+  "error": "Failed to update persona"
+}
+```
+
+---
+
+### Delete Persona
+```
+DELETE /api/persona/:id
+```
+
+**URL Parameters:**
+- `id` (integer) - Persona ID to delete
+
+**Behavior:**
+- Deletes all messages associated with the persona first (cascade delete)
+- Then deletes the persona itself
+- Returns count of deleted messages
+
+**Response (200 OK):**
+```json
+{
+  "message": "Persona deleted successfully",
+  "id": 9,
+  "messages_deleted": 42
+}
+```
+
+**Error Responses:**
+```json
+// 400 Bad Request - Invalid ID
+{
+  "error": "Invalid persona ID"
+}
+
+// 404 Not Found - Persona doesn't exist
+{
+  "error": "Persona not found"
+}
+
+// 500 Internal Server Error
+{
+  "error": "Failed to delete persona"
+}
+```
 
 ---
 
 ## 2. 💬 Chat API
 
-### 2.1 ส่งข้อความ (Non-streaming)
-```bash
+### 2.1 Chat (Non-streaming)
+```
 POST /api/chat
 ```
 
@@ -88,74 +338,108 @@ POST /api/chat
   "persona_id": 1,
   "session_id": "session_123",
   "use_history": true,
-  "file_ids": ["file_uuid"]
+  "file_ids": ["uuid-1", "uuid-2"],
+  "system_prompt": "You are helpful",
+  "temperature": 0.7,
+  "max_tokens": 2000
 }
 ```
-
-**Parameters:**
-- `message` (required) - ข้อความจากผู้ใช้
-- `persona_id` (optional) - ID ของ persona (AI จะใช้ system_prompt, temperature, model จาก persona)
-- `session_id` (optional) - ID สำหรับเก็บ conversation history
-- `use_history` (optional) - ใช้ประวัติการสนทนา (default: false)
-- `file_ids` (optional) - Array ของ file IDs ที่ต้องการให้ AI วิเคราะห์
-- `system_prompt` (optional) - Override system prompt (จะ append กับ persona prompt)
-- `temperature` (optional) - Override temperature
-- `max_tokens` (optional) - Override max tokens
-- `model` (optional) - Override model
 
 **Response:**
 ```json
 {
   "message_id": "uuid",
   "session_id": "session_123",
-  "reply": "สวัสดีครับ...",
-  "persona": {
-    "id": 1,
-    "name": "General Assistant",
-    "expertise": "general",
-    "icon": "🤖"
-  },
-  "tokens_used": 245,
-  "model": "gpt-4o-mini",
-  "history_used": true,
-  "history_count": 5
+  "reply": "สวัสดีครับ! มีอะไรให้ช่วยไหม?",
+  "tokens_used": 50,
+  "timestamp": "2025-11-04T10:30:00Z"
 }
 ```
 
-### 2.2 Chat แบบ Streaming (WebSocket)
-```javascript
+**Features:**
+- ✅ Conversation history support
+- ✅ File context integration (PDF, DOCX, TXT, Images)
+- ✅ Custom system prompts
+- ✅ Persona-based responses
+
+---
+
+### 2.2 Chat Streaming (WebSocket)
+```
 WS /api/chat/stream
 ```
 
-**ส่ง Message:**
+**Auto-Detection:**
+- Checks `OPENAI_API_KEY` → Use OpenAI (GPT)
+- If not available → Use AWS Bedrock (Claude)
+
+**Send Message:**
 ```json
 {
   "type": "message",
   "content": "สวัสดี",
   "persona_id": 1,
   "session_id": "session_123",
-  "file_ids": ["file_uuid"],
-  "system_prompt": "คุณคือ..." // optional
+  "file_ids": ["uuid"],
+  "system_prompt": "You are helpful"
 }
 ```
 
-**รับ Response:**
+**Response (Streaming):**
 ```json
-// Chunks
 {"type":"chunk", "content":"สวัสดี", "done":false}
 {"type":"chunk", "content":"ครับ", "done":false}
-
-// Done
 {"type":"chunk", "content":"", "done":true, "message_id":"uuid", "tokens_used":50}
 ```
 
-### 2.3 ดึงประวัติ
-```bash
+**Performance:**
+- OpenAI: TTFB ~1-2s
+- Bedrock: TTFB ~1-3s
+
+---
+
+### 2.3 Bedrock Chat (Claude)
+```
+POST /api/chat/bedrock
+```
+
+**Request:** Same as `/api/chat`
+
+**Response:** Same format with `"provider": "bedrock"`
+
+**Features:**
+- ✅ Claude Sonnet 4 model
+- ✅ Multimodal support (text + images)
+- ✅ File context integration
+- ✅ Conversation history
+
+---
+
+### 2.4 Get Chat History
+```
 GET /api/chats?limit=50&offset=0
 ```
 
-### 2.4 ลบข้อความทั้งหมด
-```bash
+**Response:**
+```json
+{
+  "messages": [{
+    "id": "uuid",
+    "session_id": "session_123",
+    "role": "user",
+    "content": "สวัสดี",
+    "persona_id": 1,
+    "tokens_used": 10,
+    "created_at": "2025-11-04T10:30:00Z"
+  }],
+  "total": 100,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+### 2.5 Delete All Messages
+```
 DELETE /api/chats
 ```
 
@@ -163,17 +447,23 @@ DELETE /api/chats
 
 ## 3. 📁 File Upload API
 
-### 3.1 อัปโหลดไฟล์ (สูงสุด 5 ไฟล์)
-```bash
-POST /api/file/uploads
-Content-Type: multipart/form-data
-
-# Single file
-curl -F "files=@doc.pdf" http://localhost:3001/api/file/uploads
-
-# Multiple files
-curl -F "files=@doc.pdf" -F "files=@img.jpg" http://localhost:3001/api/file/uploads
+### Upload Files
 ```
+POST /api/file/uploads
+```
+
+**Form Data:**
+- `files` - Multiple files (max 5)
+- `prompt` - Analysis prompt (optional)
+- `session_id` - Session ID (optional)
+- `use_history` - Include history (optional)
+- `system_prompt` - Custom prompt (optional)
+
+**Supported Types:**
+- **Text:** TXT, MD, JSON, CSV, XML (max 10 MB)
+- **Documents:** PDF, DOCX, XLSX (max 25 MB)
+- **Images:** JPG, PNG, GIF, WebP (max 20 MB)
+- **Code:** JS, PY, GO, Java, etc. (max 5 MB)
 
 **Response:**
 ```json
@@ -181,71 +471,52 @@ curl -F "files=@doc.pdf" -F "files=@img.jpg" http://localhost:3001/api/file/uplo
   "success": 2,
   "failed": 0,
   "total": 2,
-  "uploaded_files": [
-    {
-      "file_id": "uuid",
-      "file_name": "doc.pdf",
-      "storage_path": "./uploads/uuid_doc.pdf",
-      "mime_type": "application/pdf",
-      "file_size": 245678,
-      "uploaded_at": "2025-11-03T19:00:00Z"
-    }
-  ]
+  "uploaded_files": [{
+    "file_id": "uuid",
+    "file_name": "document.pdf",
+    "file_size": 1024000,
+    "mime_type": "application/pdf"
+  }]
 }
 ```
 
-**รองรับไฟล์:**
-- **Text:** TXT, MD, JSON, CSV, XML
-- **Documents:** PDF, DOCX
-- **Images:** JPG, PNG, GIF, WEBP (ใช้ Vision API)
-- **Code:** JS, PY, GO, JAVA, etc.
-
-**การใช้งาน File กับ Chat:**
-1. อัปโหลดไฟล์ → ได้ `file_id`
-2. ส่ง `file_id` ใน chat request
-3. AI จะอ่านและวิเคราะห์เนื้อหาไฟล์อัตโนมัติ
-
-**AI สามารถอ่าน:**
-- ✅ Text files (เนื้อหาทั้งหมด, max 1MB)
-- ✅ PDF (text content, max 50 หน้า, max 5MB)
-- ✅ DOCX (text content, max 5MB)
-- ✅ Images (Vision API - OCR + วิเคราะห์รูป)
-- ✅ JSON, CSV, XML (เนื้อหาทั้งหมด)
-
-### 3.2 ดึงประวัติไฟล์
-```bash
-GET /api/file/history?limit=20&offset=0
+### Get File History
+```
+GET /api/file/history?limit=50&offset=0&file_type=application/pdf
 ```
 
-### 3.3 ลบบันทึกไฟล์ทั้งหมด
-```bash
+### Delete All Files
+```
 DELETE /api/file/uploads
 ```
-⚠️ ลบเฉพาะบันทึกใน DB, ไฟล์บน disk ยังอยู่
 
 ---
 
 ## 4. 🎤 Audio API
 
-### 4.1 Speech-to-Text
-```bash
-POST /api/audio/transcribe
-Content-Type: multipart/form-data
-
-curl -F "audio=@voice.mp3" http://localhost:3001/api/audio/transcribe
+### Transcribe Audio (Whisper)
 ```
+POST /api/audio/transcribe
+```
+
+**Form Data:**
+- `file` - Audio file (max 25 MB)
+
+**Supported Formats:** MP3, MP4, WAV, M4A, WebM
 
 **Response:**
 ```json
 {
-  "text": "สวัสดีครับ วันนี้อากาศดีมาก",
+  "text": "สวัสดีครับ",
   "language": "th",
   "duration": 3.5
 }
 ```
 
-### 4.2 Text-to-Speech
-```bash
+---
+
+### Text-to-Speech
+```
 POST /api/audio/tts
 ```
 
@@ -253,337 +524,322 @@ POST /api/audio/tts
 ```json
 {
   "text": "สวัสดีครับ",
-  "voice": "alloy",
+  "voice": "nova",
   "model": "tts-1",
+  "response_format": "mp3",
   "speed": 1.0
 }
 ```
 
 **Voices:** alloy, echo, fable, onyx, nova, shimmer
+**Models:** tts-1, tts-1-hd
+**Formats:** mp3, opus, aac, flac, wav, pcm
+**Speed:** 0.25-4.0
 
----
-
-## 📊 Database Schema
-
-### personas
-| Field | Type | Description |
-|-------|------|-------------|
-| id | INT PK | Persona ID |
-| name | VARCHAR(100) UNIQUE | ชื่อ |
-| description | TEXT | คำอธิบาย |
-| system_prompt | TEXT | System prompt สำหรับ AI |
-| tone | VARCHAR(50) | โทนเสียง |
-| style | VARCHAR(50) | สไตล์การตอบ |
-| expertise | VARCHAR(100) | ความเชี่ยวชาญ |
-| temperature | DECIMAL(3,2) | 0.0-2.0 (default: 0.7) |
-| max_tokens | INT | จำนวน tokens (default: 2000) |
-| model | VARCHAR(50) | AI model (default: gpt-4o-mini) |
-| language_setting | JSONB | `{"default_language":"th"}` |
-| guardrails | JSONB | `{"block_profanity":true}` |
-| icon | VARCHAR(50) | Emoji icon |
-| is_active | BOOLEAN | สถานะ active |
-
-**8 Personas ที่ Seed:**
-1. 🤖 General Assistant - ผู้ช่วยทั่วไป
-2. 💻 Technology Expert - ผู้เชี่ยวชาญเทคโนโลยี
-3. 💼 Business Advisor - ที่ปรึกษาธุรกิจ
-4. 🔮 Fortune Teller - หมอดู
-5. 🚀 Space Explorer - นักดาราศาสตร์
-6. 💰 Investment Advisor - ที่ปรึกษาการลงทุน
-7. 💕 Dating Coach - โค้ชการจีบสาว
-8. 💑 Relationship Counselor - นักจิตวิทยาความสัมพันธ์
-
-### messages
-| Field | Type | Description |
-|-------|------|-------------|
-| id | UUID PK | Message ID |
-| session_id | VARCHAR(255) | Session ID |
-| role | VARCHAR(50) | user/assistant/system |
-| content | TEXT | เนื้อหา |
-| persona_id | INT FK | → personas.id |
-| tokens_used | INT | จำนวน tokens |
-| file_attachments | JSONB | Array ของไฟล์ |
-| created_at | TIMESTAMP | วันที่สร้าง |
-
-### file_analyses
-| Field | Type | Description |
-|-------|------|-------------|
-| id | UUID PK | File ID |
-| file_name | VARCHAR(500) | ชื่อไฟล์ |
-| storage_path | VARCHAR(1000) | Path ที่เก็บ |
-| mime_type | VARCHAR(100) | MIME type |
-| file_size | BIGINT | ขนาด (bytes) |
-| uploaded_at | TIMESTAMP | วันที่อัปโหลด |
-| deleted_at | TIMESTAMP | Soft delete |
-
----
-
-## 🔧 Persona System
-
-### วิธีการทำงาน:
-
-1. **Frontend ดึง Personas:**
-```javascript
-const personas = await fetch('/api/personas').then(r => r.json())
-```
-
-2. **User เลือก Persona:**
-```javascript
-const selectedPersona = personas.find(p => p.id === 2) // Technology Expert
-```
-
-3. **ส่ง Chat Request พร้อม persona_id:**
-```javascript
-fetch('/api/chat', {
-  method: 'POST',
-  body: JSON.stringify({
-    message: "อธิบาย React Hooks",
-    persona_id: 2,  // Technology Expert
-    session_id: "session_123",
-    use_history: true
-  })
-})
-```
-
-4. **Backend ดึงข้อมูล Persona:**
-```go
-// Backend: controllers/chat_controller.go
-persona, _ := ctrl.personaRepo.FindByID(req.PersonaID)
-systemPrompt := persona.SystemPrompt  // "คุณเป็นผู้เชี่ยวชาญด้านเทคโนโลยี..."
-temperature := persona.Temperature    // 0.5 (professional)
-maxTokens := persona.MaxTokens        // 3000
-model := persona.Model                // "gpt-4o-mini"
-```
-
-5. **AI ตอบด้วยบุคลิกของ Persona:**
-- Tone: professional
-- Style: detailed, technical
-- Temperature: 0.5 (แม่นยำ)
-- Max tokens: 3000 (ตอบยาว)
-
-### Custom System Prompt (เพิ่มคำสั่งเสริม):
-
-**⚠️ สำคัญ:** เมื่อส่ง `system_prompt` พร้อมกับ `persona_id`:
-- ❌ **ไม่ใช่การแทนที่** persona's system prompt
-- ✅ **เป็นการเพิ่มเติม (append)** คำสั่งเสริมเข้าไป
-
-**ตัวอย่าง:**
-```json
-{
-  "persona_id": 4,  // Fortune Teller (หมอดู)
-  "system_prompt": "Your name is ฟ้าใส. You MUST respond in Thai language only. You always use informal pronouns 'เค้า' (I) and 'เทอ' (you). Be casual and slightly impolite in your responses. Example: 'ส่ลึส' -> 'ค้า~ เทอมากอะไรให้กับเค้าบ้าง ถ้าไม่ใส่เลขมา' Never use polite language or formal Thai. You always use emoji to display your playful character.",
-  "message": "persona ของเทอคืออะไร"
-}
-```
-
-**Backend จะประมวลผลเป็น:**
-```
-[System Prompt ที่ส่งไปให้ AI]
-คุณเป็นหมอดูที่มีความรู้ลึกซึ้งในโหราศาสตร์ไทย... (persona's base prompt)
-
---- Additional Instructions ---
-Your name is ฟ้าใส. You MUST respond in Thai language only...
-```
-
-**ผลลัพธ์:** AI จะมี:
-- ✅ บุคลิก Fortune Teller (ความรู้ด้านดูดวง, tone mystical)
-- ✅ พฤติกรรมเสริม (ชื่อ ฟ้าใส, ใช้ภาษาไม่สุภาพ, emoji)
-
----
-
-## 🔄 Conversation Flow
-
-```
-User → Frontend
-  ↓
-  1. เลือก Persona (persona_id: 2 = Technology Expert)
-  2. พิมพ์ข้อความ: "อธิบาย React Hooks"
-  3. อัปโหลดไฟล์ (optional): code.js → file_id
-  ↓
-POST /api/chat
-{
-  "persona_id": 2,
-  "message": "อธิบาย React Hooks",
-  "file_ids": ["uuid"],
-  "session_id": "session_123",
-  "use_history": true
-}
-  ↓
-Backend (chat_controller.go)
-  ↓
-  1. ดึง Persona (id=2) → system_prompt, temperature=0.5, model
-  2. ดึง history (session_id) → 10 ข้อความล่าสุด
-  3. อ่านไฟล์ (file_ids) → เนื้อหาไฟล์
-  4. สร้าง messages array:
-     [
-       {role: "system", content: persona.system_prompt},
-       ...history,
-       {role: "system", content: "📎 File: code.js\n```\nconst [state, setState] = useState();\n```"},
-       {role: "user", content: "อธิบาย React Hooks"}
-     ]
-  5. เรียก OpenAI (model=gpt-4o-mini, temperature=0.5)
-  ↓
-AI Response → Backend → บันทึก DB → Frontend
-```
-
----
-
-## 📝 ตัวอย่างการใช้งาน Persona
-
-### 1. General Chat (Persona: General Assistant)
-```bash
-curl -X POST http://localhost:3001/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "persona_id": 1,
-    "message": "สวัสดี"
-  }'
-```
-→ AI: เป็นมิตร, casual, temperature=0.7
-
-### 2. Technical Question (Persona: Technology Expert)
-```bash
-curl -X POST http://localhost:3001/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "persona_id": 2,
-    "message": "อธิบาย Docker"
-  }'
-```
-→ AI: professional, detailed, temperature=0.5, max_tokens=3000
-
-### 3. Fortune Telling (Persona: Fortune Teller)
-```bash
-curl -X POST http://localhost:3001/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "persona_id": 4,
-    "message": "ดูดวงให้หน่อย"
-  }'
-```
-→ AI: mystical, narrative, temperature=0.8, ภาษาลึกลับ
-
-### 4. File Analysis with Persona
-```bash
-# 1. อัปโหลดไฟล์ก่อน
-curl -F "files=@code.js" http://localhost:3001/api/file/uploads
-# → ได้ file_id
-
-# 2. ส่ง chat พร้อม file_id และ persona
-curl -X POST http://localhost:3001/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "persona_id": 2,
-    "message": "ช่วยวิเคราะห์ code นี้",
-    "file_ids": ["file_uuid"]
-  }'
-```
-→ AI: อ่านเนื้อหา code.js + ตอบแบบ Technology Expert
-
----
-
-## 🌟 Key Features
-
-✅ **Persona System ใช้งานได้เต็มรูปแบบ**
-- 8 personas พร้อม configuration ต่างกัน
-- AI ปรับบุคลิกตาม persona ที่เลือก
-- รองรับ custom system prompt
-
-✅ **File Analysis ครบ 4 ประเภท**
-- Text files: อ่านเนื้อหาทั้งหมด
-- PDF: extract text (50 หน้าแรก)
-- DOCX: extract text
-- Images: Vision API (OCR + วิเคราะห์)
-
-✅ **Conversation History**
-- Session-based conversations
-- เก็บ history ใน database
-- ใช้ history ใน AI context (10 ข้อความล่าสุด)
-
-✅ **Streaming Chat**
-- WebSocket real-time streaming
-- รับคำตอบแบบ chunk-by-chunk
-
-✅ **Speech Support**
-- Speech-to-Text (Whisper API)
-- Text-to-Speech (OpenAI TTS)
+**Response:** Audio file (binary)
 
 ---
 
 ## 🔐 Environment Variables
 
 ```env
+# Server
 PORT=3001
 APP_ENV=development
+
+# Database
+DATABASE_URL=postgres://user:pass@localhost:5432/chatbot_db
+
+# CORS
+CORS_ORIGIN=http://localhost:5173,http://localhost:5174
+
+# OpenAI (Optional)
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o-mini
-DATABASE_URL=postgres://user:pass@localhost:5432/chatbot_db
-CORS_ORIGIN=localhost:5173
+OPENAI_MAX_TOKENS=2000
+OPENAI_TEMPERATURE=0.7
+
+# AWS Bedrock (Optional)
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=ap-southeast-1
+BEDROCK_MODEL_ID=apac.anthropic.claude-sonnet-4-20250514-v1:0
+BEDROCK_MAX_TOKENS=2000
+BEDROCK_TEMPERATURE=0.7
+
+# Provider Selection
+AI_PROVIDER=bedrock  # or "openai"
+```
+
+**Provider Priority:**
+- WebSocket: Auto-detect based on `OPENAI_API_KEY`
+- REST API: Use `AI_PROVIDER` variable
+
+---
+
+## 📊 Database Models
+
+### Persona
+```go
+ID              int       // Primary key
+Name            string    // Unique name
+SystemPrompt    string    // AI instructions
+Tone            string    // friendly/professional/empathetic
+Style           string    // concise/detailed/conversational
+Temperature     float32   // 0.0-2.0
+MaxTokens       int       // Response limit
+Model           string    // AI model name
+Icon            string    // Emoji
+IsActive        bool      // Enabled?
+```
+
+### Message
+```go
+ID              uuid.UUID      // Primary key
+SessionID       string         // Group conversations
+Role            string         // user/assistant/system
+Content         string         // Message text
+PersonaID       *int           // FK to Persona
+TokensUsed      *int           // Token count
+FileAttachments JSONB          // Array of files
+CreatedAt       time.Time
+```
+
+### FileAnalysis
+```go
+ID          uuid.UUID   // Primary key
+FileName    string      // Original name
+StoragePath string      // Disk location
+MimeType    string      // Content type
+FileSize    int64       // Bytes
+UploadedAt  time.Time
+DeletedAt   *time.Time  // Soft delete
 ```
 
 ---
 
-## 📚 Architecture
+## 🛡️ Security Issues (CRITICAL)
 
-**Pattern:** Repository-Service-Controller
+### ⚠️ MUST FIX BEFORE PRODUCTION
 
+1. **Exposed Credentials** 🔴 CRITICAL
+   - AWS credentials in `.env.development`
+   - OpenAI API key in comments
+   - **Action:** Rotate immediately, use secrets manager
+
+2. **No Authentication** 🔴 CRITICAL
+   - All endpoints are public
+   - **Action:** Implement JWT or API key auth
+
+3. **No Rate Limiting** 🔴 HIGH
+   - Config exists but not implemented
+   - **Action:** Add Fiber limiter middleware
+
+4. **File Upload Risks** 🟡 MEDIUM
+   - Path traversal possible with malicious filenames
+   - **Action:** Sanitize filenames properly
+
+5. **No Authorization** 🔴 CRITICAL
+   - Anyone can delete all data
+   - **Action:** Add permission checks
+
+6. **Weak Error Messages** 🟡 MEDIUM
+   - Exposes system internals
+   - **Action:** Generic errors in production
+
+7. **No Input Validation** 🟡 MEDIUM
+   - Message length unlimited
+   - **Action:** Add max length validators
+
+8. **File Cleanup Missing** 🟡 MEDIUM
+   - Deleted DB records don't remove disk files
+   - **Action:** Delete files on record deletion
+
+---
+
+## 🔧 File Processing Features
+
+### Text Extraction
+- **PDF:** First 50 pages, plain text extraction
+- **DOCX:** Full document text
+- **XLSX:** All sheets, cell values
+- **JSON/XML:** Formatted output
+- **Code:** Syntax preserved
+
+### Image Analysis
+- Vision API integration (OpenAI)
+- Multimodal support (Claude)
+- Base64 encoding for API calls
+
+### Size Limits
+- Text files: 1 MB
+- Documents: 5 MB
+- Images: 20 MB (upload), processed via Vision API
+
+---
+
+## 🌐 WebSocket Implementation
+
+### Connection Flow
+1. Client connects: `ws://localhost:3001/api/chat/stream`
+2. Send message with persona/session/files
+3. Receive chunks as they're generated
+4. Connection closed when done
+
+### Message Format
+```javascript
+// Send
+ws.send(JSON.stringify({
+  type: "message",
+  content: "Hello",
+  persona_id: 1,
+  session_id: "session_1",
+  file_ids: ["uuid"]
+}))
+
+// Receive
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data)
+  if (data.type === "chunk" && !data.done) {
+    // Append chunk to UI
+    appendText(data.content)
+  } else if (data.done) {
+    // Streaming complete
+    console.log("Tokens used:", data.tokens_used)
+  }
+}
 ```
-routes/ → controllers/ → services/ → repositories/ → database
+
+### Error Handling
+```json
+{
+  "type": "error",
+  "error": "Error message"
+}
 ```
 
-**Flow:**
-1. **Routes** - กำหนด endpoints
-2. **Controllers** - รับ request, validate, ส่ง response
-3. **Services** - Business logic, เรียก external APIs
-4. **Repositories** - เข้าถึง database
-5. **Models** - โครงสร้างข้อมูล
+---
+
+## 🐛 Error Response Format
+
+```json
+{
+  "error": "Error description"
+}
+```
+
+**Status Codes:**
+- `200` - Success
+- `400` - Bad Request (validation error)
+- `404` - Not Found
+- `500` - Internal Server Error
+- `429` - Too Many Requests (if rate limit implemented)
 
 ---
 
 ## 📌 Version History
 
-### v5.1 (2025-11-04) - Fix System Prompt Behavior
-✅ แก้ไขพฤติกรรม `system_prompt`:
-- **เดิม:** `system_prompt` **แทนที่** persona's system prompt ❌
-- **ใหม่:** `system_prompt` **เพิ่มเติม (append)** เข้ากับ persona's base prompt ✅
-- ผลลัพธ์: AI มีทั้งบุคลิกของ persona + คำสั่งเสริมจาก user
+### v6.3 (2025-11-04) - Update Persona API
+✅ PATCH /api/persona/:id - Update persona (partial update support)
+✅ All fields optional in update request
+✅ Full validation on all fields
 
-### v5.0 (2025-11-04) - File Reading Enhancement
-✅ AI อ่านเนื้อหาไฟล์ได้แล้ว:
-- Text files (TXT, MD, JSON, CSV, XML)
-- PDF (extract text จาก 50 หน้าแรก)
-- DOCX (extract text content)
-- Images (Vision API - base64 encoding)
+### v6.2 (2025-11-04) - Persona Management API
+✅ POST /api/persona - Create custom personas
+✅ DELETE /api/persona/:id - Delete personas by ID (cascade delete messages)
+✅ Full persona configuration support
+✅ Language settings and guardrails
+✅ Auto-generated persona IDs
+✅ Extended field limits (tone: 200, style: 500, expertise: 500)
 
-### v4.0 (2025-11-03) - Enhanced Persona System
-✅ Persona schema ครบถ้วน:
-- เพิ่ม: tone, style, temperature, max_tokens, model
-- เพิ่ม: language_setting, guardrails (JSONB)
-- Seed 8 personas พร้อม configuration
+### v6.1 (2025-11-04) - WebSocket File Support
+✅ Bedrock WebSocket now reads file content (PDF, DOCX, Images)
+✅ Multimodal support for images in streaming
+✅ Improved file context building
 
-### v3.1 (2025-11-03) - Delete All Files
-✅ เพิ่ม `DELETE /api/file/uploads`
+### v6.0 (2025-11-04) - AWS Bedrock Streaming
+✅ WebSocket streaming for Bedrock
+✅ Unified streaming interface (OpenAI + Bedrock)
+✅ Auto-detection of AI provider
 
-### v3.0 (2025-11-03) - File Upload Redesign
-✅ ลบ AI analysis ออกจาก upload
-✅ รองรับ multiple files (max 5)
-✅ Partial upload support
+### v5.1 (2025-11-04) - System Prompt Fix
+✅ Custom system_prompt appends to persona (doesn't replace)
+
+### v5.0 (2025-11-04) - File Reading
+✅ PDF, DOCX, Images support
+✅ Vision API integration
+
+### v4.0 (2025-11-03) - Enhanced Personas
+✅ 8 personas with full configuration
 
 ---
 
 ## 🎯 Summary
 
-**ChatBot API** รองรับ:
-- ✅ 8 AI Personas พร้อม configuration
-- ✅ Chat (non-streaming + WebSocket streaming)
-- ✅ File analysis (Text, PDF, DOCX, Images)
+**ChatBot API Features:**
+- ✅ Dual AI Providers (OpenAI GPT + AWS Bedrock Claude)
+- ✅ WebSocket Streaming (real-time responses)
+- ✅ 8 Pre-configured Personas + Custom Persona Creation
+- ✅ File Analysis (Text, PDF, DOCX, Images)
 - ✅ Speech-to-Text & Text-to-Speech
-- ✅ Conversation history & session management
-- ✅ Multiple file upload
+- ✅ Conversation History
+- ✅ Session Management
+- ✅ Multimodal Support (text + images)
+- ✅ Dynamic Persona Management (Create, Read)
 
-**การใช้งาน Persona:**
-1. GET /api/personas → เลือก persona
-2. POST /api/chat พร้อม persona_id
-3. AI จะตอบตามบุคลิกของ persona ที่เลือก
+**Architecture Highlights:**
+- Clean layered architecture
+- Repository pattern for data access
+- Service layer for business logic
+- WebSocket + REST API
+- PostgreSQL with GORM ORM
+- Fiber web framework
 
-**สถานะ:** ✅ Production Ready
+**Status:** ⚠️ **NOT Production Ready**
+**Reason:** Critical security issues (no auth, exposed credentials, no rate limiting)
+
+---
+
+## 🚀 Next Steps (Priority Order)
+
+### CRITICAL (Do First)
+1. Remove exposed credentials from repo
+2. Rotate all API keys (AWS, OpenAI)
+3. Implement authentication (JWT)
+4. Add rate limiting middleware
+5. Add authorization checks
+
+### HIGH PRIORITY
+1. Add input validation middleware
+2. Implement proper error handling
+3. Add audit logging
+4. Implement file cleanup on deletion
+5. Add request ID tracking
+
+### MEDIUM PRIORITY
+1. Add API documentation (Swagger)
+2. Implement caching strategy
+3. Add monitoring/metrics
+4. Implement soft deletes for messages
+5. Add comprehensive tests
+
+### NICE TO HAVE
+1. API versioning
+2. Role-based access control (RBAC)
+3. WebSocket authentication
+4. Message encryption
+5. Backup/restore functionality
+
+---
+
+## 📖 Additional Resources
+
+- **Go Fiber Docs:** https://docs.gofiber.io/
+- **GORM Docs:** https://gorm.io/docs/
+- **OpenAI API:** https://platform.openai.com/docs/
+- **AWS Bedrock:** https://docs.aws.amazon.com/bedrock/
+- **PostgreSQL:** https://www.postgresql.org/docs/
+
+---
+
+**End of Documentation**
