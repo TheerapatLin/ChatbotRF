@@ -39,7 +39,11 @@
       "Bash(wc:*)",
       "Bash(.\\chatbot.exe)",
       "Bash(./chatbot.exe)",
-      "Bash(psql:*)"
+      "Bash(psql:*)",
+      "Bash(cd:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(node:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []

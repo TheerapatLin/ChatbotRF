@@ -68,7 +68,7 @@ func main() {
 	}))
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: cfg.CORSOrigin,
-		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
+		AllowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 	}))
 

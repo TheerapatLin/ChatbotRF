@@ -1,6 +1,6 @@
 # ChatBot API Documentation
 
-**Version:** 6.2 (2025-11-04)
+**Version:** 6.4 (2025-11-05)
 **Base URL:** `http://localhost:3001`
 
 ---
@@ -515,7 +515,7 @@ POST /api/audio/transcribe
 
 ---
 
-### Text-to-Speech
+### Text-to-Speech (OpenAI)
 ```
 POST /api/audio/tts
 ```
@@ -536,7 +536,117 @@ POST /api/audio/tts
 **Formats:** mp3, opus, aac, flac, wav, pcm
 **Speed:** 0.25-4.0
 
-**Response:** Audio file (binary)
+**Response:** Audio file (binary) or JSON with base64-encoded audio
+
+---
+
+### Text-to-Speech (ElevenLabs)
+```
+POST /audio/elevenlabs/tts
+```
+
+**Request:**
+```json
+{
+  "text": "Hello, <break time=\"1s\"/> this is a test with <emphasis level=\"strong\">SSML support</emphasis>.",
+  "voice_id": "21m00Tcm4TlvDq8ikWAM",
+  "model_id": "eleven_multilingual_v2",
+  "stability": 0.5,
+  "similarity_boost": 0.75,
+  "style": 0.0,
+  "speed": 1.0,
+  "use_speaker_boost": true
+}
+```
+
+**Alternative Request (with voice_settings object):**
+```json
+{
+  "text": "สวัสดีครับ ยินดีต้อนรับ",
+  "voice_id": "21m00Tcm4TlvDq8ikWAM",
+  "model_id": "eleven_multilingual_v2",
+  "voice_settings": {
+    "stability": 0.5,
+    "similarity_boost": 0.75,
+    "style": 0.0,
+    "speed": 1.0,
+    "use_speaker_boost": true
+  }
+}
+```
+
+**Parameters:**
+- `text` (required) - Text to convert to speech (supports SSML tags)
+- `voice_id` (optional) - ElevenLabs voice ID (default: "21m00Tcm4TlvDq8ikWAM" - Rachel)
+- `model_id` (optional) - Model to use (default: "eleven_multilingual_v2")
+- `stability` (optional, 0.0-1.0) - Controls emotional consistency and accent stability
+  - Low (0.0): More varied emotions and natural expression
+  - High (1.0): More consistent, limited emotional range
+- `similarity_boost` (optional, 0.0-1.0) - How closely AI matches original voice (for cloned voices)
+  - High (1.0): Closer match to original voice
+- `style` (optional, 0.0-1.0) - Exaggeration of speaking style
+  - High: More pronounced style characteristics
+- `speed` (optional, 0.7-1.2) - Speaking speed (1.0 = normal)
+- `use_speaker_boost` (optional, boolean) - Enhance speaker characteristics
+
+**SSML Support:**
+ElevenLabs supports SSML (Speech Synthesis Markup Language) tags:
+- `<break time="1s"/>` - Pause for specified duration
+- `<emphasis level="strong">text</emphasis>` - Emphasize words
+- Phonemes for specific pronunciation control
+
+**Response (JSON with Accept: application/json):**
+```json
+{
+  "audio_data": "base64-encoded-audio-data",
+  "format": "mp3",
+  "characters_used": 42,
+  "model_id": "eleven_multilingual_v2",
+  "voice_id": "21m00Tcm4TlvDq8ikWAM",
+  "duration_seconds": 3.5,
+  "timestamp": "2025-11-05T10:30:00Z"
+}
+```
+
+**Response (Binary with Accept: audio/mpeg or audio/*):**
+Returns raw MP3 audio data with headers:
+- `Content-Type: audio/mpeg`
+- `X-Audio-Duration: <seconds>`
+- `X-Characters-Used: <count>`
+- `X-Voice-ID: <voice_id>`
+- `X-Model-ID: <model_id>`
+
+**Available Models:**
+- `eleven_multilingual_v2` - Multilingual, high quality
+- `eleven_monolingual_v1` - English only, optimized
+- `eleven_turbo_v2` - Fast generation, lower latency
+
+---
+
+### Get ElevenLabs Voices
+```
+GET /audio/elevenlabs/voices
+```
+
+**Response:**
+```json
+{
+  "voices": [
+    {
+      "voice_id": "21m00Tcm4TlvDq8ikWAM",
+      "name": "Rachel",
+      "category": "premade",
+      "labels": {
+        "accent": "american",
+        "description": "calm",
+        "age": "young",
+        "gender": "female"
+      }
+    }
+  ],
+  "count": 1
+}
+```
 
 ---
 
@@ -566,6 +676,9 @@ AWS_REGION=ap-southeast-1
 BEDROCK_MODEL_ID=apac.anthropic.claude-sonnet-4-20250514-v1:0
 BEDROCK_MAX_TOKENS=2000
 BEDROCK_TEMPERATURE=0.7
+
+# ElevenLabs (Optional)
+ELEVENLABS_API_KEY=...
 
 # Provider Selection
 AI_PROVIDER=bedrock  # or "openai"
@@ -739,6 +852,14 @@ ws.onmessage = (event) => {
 
 ## 📌 Version History
 
+### v6.4 (2025-11-05) - ElevenLabs TTS Integration
+✅ POST /audio/elevenlabs/tts - Text-to-Speech with ElevenLabs
+✅ GET /audio/elevenlabs/voices - Get available ElevenLabs voices
+✅ SSML support for advanced speech control
+✅ Voice settings: stability, similarity_boost, style, speed
+✅ Dual response format: JSON (base64) or binary audio
+✅ Multilingual support with multiple models
+
 ### v6.3 (2025-11-04) - Update Persona API
 ✅ PATCH /api/persona/:id - Update persona (partial update support)
 ✅ All fields optional in update request
@@ -781,11 +902,13 @@ ws.onmessage = (event) => {
 - ✅ WebSocket Streaming (real-time responses)
 - ✅ 8 Pre-configured Personas + Custom Persona Creation
 - ✅ File Analysis (Text, PDF, DOCX, Images)
-- ✅ Speech-to-Text & Text-to-Speech
+- ✅ Speech-to-Text (OpenAI Whisper)
+- ✅ Text-to-Speech (OpenAI TTS + ElevenLabs)
+- ✅ SSML Support for Advanced Speech Control
 - ✅ Conversation History
 - ✅ Session Management
 - ✅ Multimodal Support (text + images)
-- ✅ Dynamic Persona Management (Create, Read)
+- ✅ Dynamic Persona Management (Create, Read, Update, Delete)
 
 **Architecture Highlights:**
 - Clean layered architecture

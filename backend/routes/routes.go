@@ -23,6 +23,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	// Initialize services
 	openaiService := services.NewOpenAIService(cfg)
 	ttsService := services.NewTTSService(cfg)
+	elevenLabsService := services.NewElevenLabsService(cfg)
 	contextService := services.NewContextService(messageRepo, fileAnalysisRepo)
 	fileService := services.NewFileService(openaiService.GetClient(), contextService)
 
@@ -37,6 +38,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	chatCtrl := controllers.NewChatController(messageRepo, personaRepo, fileAnalysisRepo, openaiService)
 	personaCtrl := controllers.NewPersonaController(personaRepo, messageRepo)
 	audioCtrl := controllers.NewAudioController(openaiService, ttsService)
+	elevenLabsCtrl := controllers.NewElevenLabsController(elevenLabsService)
 	wsCtrl := controllers.NewWebSocketController(messageRepo, personaRepo, fileAnalysisRepo, openaiService, bedrockService)
 	fileCtrl := controllers.NewFileController(fileService, fileAnalysisRepo, messageRepo)
 
@@ -78,6 +80,10 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	// Audio endpoints
 	api.Post("/audio/transcribe", audioCtrl.TranscribeAudio)
 	api.Post("/audio/tts", audioCtrl.TextToSpeech)
+
+	// ElevenLabs endpoints
+	api.Post("/audio/elevenlabs/tts", elevenLabsCtrl.TextToSpeech)
+	api.Get("/audio/elevenlabs/voices", elevenLabsCtrl.GetVoices)
 
 	// File upload endpoints
 	api.Post("/file/uploads", fileCtrl.UploadFiles)

@@ -84,6 +84,7 @@ func (ctrl *PersonaController) GetAllPersonas(c *fiber.Ctx) error {
 			ID:              persona.ID,
 			Name:            persona.Name,
 			Description:     persona.Description,
+			SystemPrompt:    persona.SystemPrompt,
 			Tone:            persona.Tone,
 			Style:           persona.Style,
 			Expertise:       persona.Expertise,

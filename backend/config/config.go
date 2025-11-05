@@ -38,6 +38,9 @@ type Config struct {
 	BedrockModelID     string
 	BedrockMaxTokens   int
 	BedrockTemperature float64
+
+	// ElevenLabs
+	ElevenLabsAPIKey string
 }
 
 var AppConfig *Config
@@ -102,6 +105,9 @@ func LoadConfig() *Config {
 		BedrockModelID:     getEnv("BEDROCK_MODEL_ID", "anthropic.claude-sonnet-4-5-20250929-v1:0"),
 		BedrockMaxTokens:   bedrockMaxTokens,
 		BedrockTemperature: bedrockTemperature,
+
+		// ElevenLabs
+		ElevenLabsAPIKey: getEnv("ELEVENLABS_API_KEY", ""),
 	}
 
 	// Validate required configs
