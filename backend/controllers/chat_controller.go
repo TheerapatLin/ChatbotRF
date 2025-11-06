@@ -368,7 +368,7 @@ func (ctrl *ChatController) GetChatHistory(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(response)
 }
 
-// DeleteAllMessages handles DELETE /api/chat endpoint
+// DeleteAllMessages handles DELETE /api/chats endpoint
 func (ctrl *ChatController) DeleteAllMessages(c *fiber.Ctx) error {
 	// Delete all messages from database
 	if err := ctrl.messageRepo.DeleteAll(); err != nil {
@@ -379,6 +379,29 @@ func (ctrl *ChatController) DeleteAllMessages(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "All messages deleted successfully",
+	})
+}
+
+// DeleteMessagesBySession handles DELETE /api/chats/session/:sessionId endpoint
+func (ctrl *ChatController) DeleteMessagesBySession(c *fiber.Ctx) error {
+	// Get session ID from URL parameter
+	sessionID := c.Params("sessionId")
+	if sessionID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Session ID is required",
+		})
+	}
+
+	// Delete all messages in this session
+	if err := ctrl.messageRepo.DeleteSession(sessionID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to delete messages for session",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Session messages deleted successfully",
+		"session_id": sessionID,
 	})
 }
 
