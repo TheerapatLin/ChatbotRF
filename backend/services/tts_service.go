@@ -10,6 +10,9 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
+// DefaultTTSModel is the default TTS model to use
+const DefaultTTSModel = "gpt-4o-mini-tts"
+
 // TTSService handles Text-to-Speech operations using OpenAI TTS API
 type TTSService struct {
 	client *openai.Client
@@ -55,8 +58,9 @@ var ValidVoices = map[string]bool{
 
 // ValidModels contains all available OpenAI TTS models
 var ValidModels = map[string]bool{
-	"tts-1":    true,
-	"tts-1-hd": true,
+	"tts-1":           true,
+	"tts-1-hd":        true,
+	"gpt-4o-mini-tts": true,
 }
 
 // ValidFormats contains all available audio formats
@@ -90,10 +94,10 @@ func (s *TTSService) TextToSpeech(ctx context.Context, req TTSRequest) (*TTSResp
 
 	// Set default model
 	if req.Model == "" {
-		req.Model = "tts-1"
+		req.Model = DefaultTTSModel
 	}
 	if !ValidModels[req.Model] {
-		return nil, fmt.Errorf("invalid model. Allowed: tts-1, tts-1-hd")
+		return nil, fmt.Errorf("invalid model. Allowed: tts-1, tts-1-hd, gpt-4o-mini-tts")
 	}
 
 	// Set default format
@@ -134,8 +138,8 @@ func (s *TTSService) TextToSpeech(ctx context.Context, req TTSRequest) (*TTSResp
 		return nil, fmt.Errorf("failed to read audio data: %w", err)
 	}
 
-	// Estimate duration (rough estimate: ~150 words per minute, ~5 chars per word)
-	// This is approximate - actual duration depends on voice speed
+	// ระยะเวลาโดยประมาณ (ประมาณคร่าวๆ: ~150 คำต่อนาที, ~5 ตัวอักษรต่อคำ)
+	// นี่เป็นค่าประมาณ - ระยะเวลาจริงขึ้นอยู่กับความเร็วของเสียง
 	words := float64(len(req.Text)) / 5.0
 	duration := (words / 150.0) * 60.0 * (1.0 / req.Speed)
 
@@ -153,7 +157,7 @@ func (s *TTSService) TextToSpeechSimple(ctx context.Context, text string) ([]byt
 	req := TTSRequest{
 		Text:           text,
 		Voice:          "nova",
-		Model:          "tts-1",
+		Model:          DefaultTTSModel,
 		ResponseFormat: "mp3",
 		Speed:          1.0,
 	}

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/base64"
+	"fmt"
 	"time"
 
 	"chatbot/services"
@@ -38,7 +39,7 @@ func (ctrl *AudioController) TranscribeAudio(c *fiber.Ctx) error {
 	file, err := c.FormFile("audio")
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "audio file is required",
+			"error":   "audio file is required",
 			"details": err.Error(),
 		})
 	}
@@ -63,7 +64,7 @@ func (ctrl *AudioController) TranscribeAudio(c *fiber.Ctx) error {
 	if err != nil {
 		println("❌ Failed to open file:", err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to read uploaded file",
+			"error":   "Failed to read uploaded file",
 			"details": err.Error(),
 		})
 	}
@@ -75,7 +76,7 @@ func (ctrl *AudioController) TranscribeAudio(c *fiber.Ctx) error {
 	if err != nil {
 		println("❌ Transcription failed:", err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to transcribe audio",
+			"error":   "Failed to transcribe audio",
 			"details": err.Error(),
 		})
 	}
@@ -97,10 +98,10 @@ func (ctrl *AudioController) TranscribeAudio(c *fiber.Ctx) error {
 // TTSRequest represents the TTS request body
 type TTSRequest struct {
 	Text           string   `json:"text" validate:"required,max=4096"`
-	Voice          string   `json:"voice"`
-	Model          string   `json:"model"`
-	ResponseFormat string   `json:"response_format"`
-	Speed          *float64 `json:"speed"` // Use pointer to allow null/omitted values
+	Voice          string   `json:"voice"`          // alloy, echo, fable, onyx, nova, shimmer (default: nova)
+	Model          string   `json:"model"`          // tts-1, tts-1-hd, gpt-4o-mini-tts (default: gpt-4o-mini-tts)
+	ResponseFormat string   `json:"response_format"` // mp3, opus, aac, flac, wav, pcm (default: mp3)
+	Speed          *float64 `json:"speed"`          // 0.25 - 4.0 (default: 1.0)
 }
 
 // TTSResponse represents the TTS response with audio data
@@ -180,8 +181,8 @@ func (ctrl *AudioController) TextToSpeech(c *fiber.Ctx) error {
 		}
 
 		c.Set("Content-Type", contentType)
-		c.Set("X-Audio-Duration", string(rune(int(ttsRes.Duration))))
-		c.Set("X-Characters-Used", string(rune(ttsRes.CharactersUsed)))
+		c.Set("X-Audio-Duration", fmt.Sprintf("%.2f", ttsRes.Duration))
+		c.Set("X-Characters-Used", fmt.Sprintf("%d", ttsRes.CharactersUsed))
 
 		return c.Send(ttsRes.AudioData)
 	}

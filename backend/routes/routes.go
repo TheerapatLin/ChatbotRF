@@ -40,6 +40,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	audioCtrl := controllers.NewAudioController(openaiService, ttsService)
 	elevenLabsCtrl := controllers.NewElevenLabsController(elevenLabsService)
 	wsCtrl := controllers.NewWebSocketController(messageRepo, personaRepo, fileAnalysisRepo, openaiService, bedrockService)
+	ttsWSCtrl := controllers.NewTTSWebSocketController(ttsService, personaRepo)
 	fileCtrl := controllers.NewFileController(fileService, fileAnalysisRepo, messageRepo)
 
 	// Initialize Bedrock controller
@@ -104,4 +105,17 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 
 	// WebSocket endpoint for streaming chat: Upgrade HTTP เป็น WebSocket
 	app.Get("/api/chat/stream", websocket.New(wsCtrl.HandleStreamingChat))
+
+	// WebSocket upgrade middleware for TTS
+	app.Use("/api/ws/tts", func(c *fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			c.Locals("allowed", true)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
+
+	// WebSocket endpoint for TTS streaming
+	app.Get("/api/ws/tts", websocket.New(ttsWSCtrl.HandleTTSWebSocket))
+	log.Println("✅ TTS WebSocket endpoint registered at: ws://localhost:3001/api/ws/tts")
 }
