@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ElevenLabs WebSocket Test</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 40px;
+      max-width: 700px;
+      width: 100%;
+    }
+
+    h1 {
+      color: #667eea;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+
+    .status.connected {
+      background: #4caf50;
+      color: white;
+    }
+
+    .status.disconnected {
+      background: #f44336;
+      color: white;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 16px;
+      resize: vertical;
+      margin-bottom: 20px;
+      font-family: inherit;
+    }
+
+    .options {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .option-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    label {
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 5px;
+      color: #555;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    select {
+      padding: 10px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    button {
+      flex: 1;
+      padding: 15px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-danger {
+      background: #f44336;
+      color: white;
+    }
+
+    .progress-bar {
+      position: relative;
+      height: 30px;
+      background: #e0e0e0;
+      border-radius: 8px;
+      margin: 15px 0;
+      overflow: hidden;
+      display: none;
+    }
+
+    .progress-bar.active {
+      display: block;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      transition: width 0.3s ease;
+    }
+
+    .progress-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 12px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .log {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+    }
+
+    .log-entry {
+      margin-bottom: 5px;
+      padding: 5px;
+      border-radius: 4px;
+    }
+
+    .log-entry.info {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+
+    .log-entry.success {
+      background: #e8f5e9;
+      color: #388e3c;
+    }
+
+    .log-entry.error {
+      background: #ffebee;
+      color: #c62828;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎙️ ElevenLabs WebSocket Test</h1>
+    <span id="status" class="status disconnected">ไม่ได้เชื่อมต่อ</span>
+
+    <textarea
+      id="text"
+      rows="4"
+      placeholder="กรอกข้อความที่ต้องการแปลงเป็นเสียง...">Hello, world! How are you today? I am testing ElevenLabs TTS with WebSocket streaming.</textarea>
+
+    <div class="options">
+      <div class="option-group">
+        <label>Voice ID</label>
+        <input type="text" id="voiceId" value="21m00Tcm4TlvDq8ikWAM" placeholder="Voice ID">
+        <small style="color: #888; margin-top: 3px;">Rachel (default)</small>
+      </div>
+
+      <div class="option-group">
+        <label>Model ID</label>
+        <select id="modelId">
+          <option value="eleven_multilingual_v2" selected>Multilingual V2</option>
+          <option value="eleven_monolingual_v1">Monolingual V1</option>
+          <option value="eleven_turbo_v2">Turbo V2 (Fast)</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label>Stability (0.0 - 1.0)</label>
+        <input type="number" id="stability" value="0.5" min="0" max="1" step="0.1">
+      </div>
+
+      <div class="option-group">
+        <label>Similarity Boost (0.0 - 1.0)</label>
+        <input type="number" id="similarityBoost" value="0.75" min="0" max="1" step="0.05">
+      </div>
+
+      <div class="option-group">
+        <label>Style (0.0 - 1.0)</label>
+        <input type="number" id="style" value="0.0" min="0" max="1" step="0.1">
+      </div>
+
+      <div class="option-group">
+        <label>Speed (0.7 - 1.2)</label>
+        <input type="number" id="speed" value="1.0" min="0.7" max="1.2" step="0.1">
+      </div>
+    </div>
+
+    <div id="progressBar" class="progress-bar">
+      <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+      <span id="progressText" class="progress-text">0 / 0</span>
+    </div>
+
+    <div class="controls">
+      <button id="speakBtn" class="btn-primary">🎤 เริ่มพูด</button>
+      <button id="stopBtn" class="btn-danger" disabled>⏹️ หยุด</button>
+    </div>
+
+    <div class="log" id="log"></div>
+  </div>
+
+  <script>
+    class ElevenLabsWSService {
+      constructor() {
+        this.ws = null
+        this.audioQueue = []
+        this.isPlaying = false
+        this.sessionId = null
+        this.audioContext = null
+        this.sourceNode = null
+
+        this.onChunk = null
+        this.onComplete = null
+        this.onError = null
+        this.onStopped = null
+      }
+
+      connect() {
+        return new Promise((resolve, reject) => {
+          const wsUrl = 'ws://localhost:3000'
+          this.ws = new WebSocket(`${wsUrl}/api/ws/elevenlabs`)
+
+          this.ws.onopen = () => {
+            console.log('✅ ElevenLabs WebSocket connected')
+            resolve()
+          }
+
+          this.ws.onerror = (error) => {
+            console.error('❌ WebSocket error:', error)
+            reject(new Error('WebSocket connection failed'))
+          }
+
+          this.ws.onmessage = (event) => {
+            this.handleMessage(JSON.parse(event.data))
+          }
+
+          this.ws.onclose = () => {
+            console.log('ElevenLabs WebSocket disconnected')
+            this.cleanup()
+          }
+        })
+      }
+
+      async synthesize(options) {
+        const {
+          text,
+          voiceId,
+          modelId,
+          stability,
+          similarityBoost,
+          style,
+          speed
+        } = options
+
+        this.sessionId = `elevenlabs_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        this.stop()
+
+        const message = {
+          type: 'tts',
+          session_id: this.sessionId,
+          text,
+          voice_id: voiceId,
+          model_id: modelId,
+          stability: parseFloat(stability),
+          similarity_boost: parseFloat(similarityBoost),
+          style: parseFloat(style),
+          speed: parseFloat(speed)
+        }
+
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify(message))
+        } else {
+          throw new Error('WebSocket not connected')
+        }
+      }
+
+      handleMessage(data) {
+        switch (data.type) {
+          case 'audio_chunk':
+          case 'chunk':  // รองรับทั้ง 'audio_chunk' และ 'chunk'
+            this.handleAudioChunk(data)
+            if (this.onChunk) this.onChunk(data)
+            break
+          case 'completed':
+          case 'complete':  // รองรับทั้ง 'completed' และ 'complete'
+            this.handleComplete(data)
+            if (this.onComplete) this.onComplete(data)
+            break
+          case 'error':
+            const errorMsg = data.error || data.message || 'Unknown error'
+            console.error('TTS Error:', errorMsg)
+            if (this.onError) this.onError(errorMsg)
+            break
+          case 'stopped':
+            console.log('TTS stopped')
+            if (this.onStopped) this.onStopped()
+            break
+          case 'started':
+          case 'progress':
+            // Ignore these message types (just for logging)
+            console.log(`Received ${data.type} message:`, data)
+            break
+          default:
+            console.warn('Unknown message type:', data.type, data)
+        }
+      }
+
+      handleAudioChunk(data) {
+        // รองรับทั้ง audio_data และ data field
+        const audioBase64 = data.audio_data || data.data || data.audio
+        if (!audioBase64) {
+          console.error('No audio data in chunk:', data)
+          return
+        }
+
+        const audioData = this.base64ToArrayBuffer(audioBase64)
+        this.audioQueue.push({
+          data: audioData,
+          format: data.format || 'mp3',
+          index: data.chunk_index || data.chunk_id || 0,
+          text: data.text || ''
+        })
+
+        if (!this.isPlaying) {
+          this.playQueue()
+        }
+      }
+
+      async playQueue() {
+        if (this.audioQueue.length === 0) {
+          this.isPlaying = false
+          return
+        }
+
+        this.isPlaying = true
+        const chunk = this.audioQueue.shift()
+
+        try {
+          if (!this.audioContext) {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)()
+          }
+
+          const audioBuffer = await this.audioContext.decodeAudioData(chunk.data)
+          this.sourceNode = this.audioContext.createBufferSource()
+          this.sourceNode.buffer = audioBuffer
+          this.sourceNode.connect(this.audioContext.destination)
+          this.sourceNode.start(0)
+
+          this.sourceNode.onended = () => {
+            this.playQueue()
+          }
+        } catch (error) {
+          console.error('Error playing audio chunk:', error)
+          this.playQueue()
+        }
+      }
+
+      stop() {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN && this.sessionId) {
+          this.ws.send(JSON.stringify({
+            type: 'stop',
+            session_id: this.sessionId
+          }))
+        }
+
+        if (this.sourceNode) {
+          try {
+            this.sourceNode.stop()
+          } catch (e) {}
+          this.sourceNode = null
+        }
+
+        this.audioQueue = []
+        this.isPlaying = false
+      }
+
+      handleComplete(data) {
+        console.log('✅ TTS completed:', data)
+      }
+
+      cleanup() {
+        this.stop()
+        if (this.audioContext) {
+          this.audioContext.close()
+          this.audioContext = null
+        }
+      }
+
+      disconnect() {
+        this.cleanup()
+        if (this.ws) {
+          this.ws.close()
+          this.ws = null
+        }
+      }
+
+      base64ToArrayBuffer(base64) {
+        const binaryString = window.atob(base64)
+        const len = binaryString.length
+        const bytes = new Uint8Array(len)
+
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i)
+        }
+
+        return bytes.buffer
+      }
+    }
+
+    // UI Management
+    const service = new ElevenLabsWSService()
+    let isConnected = false
+    let isPlaying = false
+    let currentChunk = 0
+    let totalChunks = 0
+
+    const elements = {
+      status: document.getElementById('status'),
+      text: document.getElementById('text'),
+      voiceId: document.getElementById('voiceId'),
+      modelId: document.getElementById('modelId'),
+      stability: document.getElementById('stability'),
+      similarityBoost: document.getElementById('similarityBoost'),
+      style: document.getElementById('style'),
+      speed: document.getElementById('speed'),
+      speakBtn: document.getElementById('speakBtn'),
+      stopBtn: document.getElementById('stopBtn'),
+      progressBar: document.getElementById('progressBar'),
+      progressFill: document.getElementById('progressFill'),
+      progressText: document.getElementById('progressText'),
+      log: document.getElementById('log')
+    }
+
+    // Connect on page load
+    async function initialize() {
+      try {
+        addLog('กำลังเชื่อมต่อ WebSocket...', 'info')
+        await service.connect()
+        isConnected = true
+        elements.status.textContent = 'เชื่อมต่อแล้ว'
+        elements.status.className = 'status connected'
+        addLog('✅ เชื่อมต่อสำเร็จ', 'success')
+      } catch (error) {
+        isConnected = false
+        elements.status.textContent = 'ไม่ได้เชื่อมต่อ'
+        elements.status.className = 'status disconnected'
+        addLog('❌ เชื่อมต่อล้มเหลว: ' + error.message, 'error')
+      }
+    }
+
+    // Setup callbacks
+    service.onChunk = (data) => {
+      isPlaying = true
+      // รองรับทั้ง chunk_index, chunk_id, และ index
+      const chunkIdx = data.chunk_index !== undefined ? data.chunk_index : (data.chunk_id || data.index || 0)
+      currentChunk = chunkIdx + 1
+      // รองรับทั้ง total_chunks และ chunks
+      totalChunks = data.total_chunks || data.chunks || 0
+      updateProgress()
+      updateButtons()
+      const chunkText = data.text || data.content || '(no text)'
+      addLog(`📦 รับ chunk ${currentChunk}/${totalChunks}: "${chunkText}"`, 'info')
+    }
+
+    service.onComplete = (data) => {
+      isPlaying = false
+      elements.progressBar.classList.remove('active')
+      updateButtons()
+      addLog('✅ เล่นเสียงเสร็จสมบูรณ์', 'success')
+    }
+
+    service.onError = (error) => {
+      isPlaying = false
+      updateButtons()
+      addLog('❌ Error: ' + error, 'error')
+    }
+
+    service.onStopped = () => {
+      isPlaying = false
+      elements.progressBar.classList.remove('active')
+      updateButtons()
+      addLog('⏹️ หยุดเล่นเสียงแล้ว', 'info')
+    }
+
+    // Speak button
+    elements.speakBtn.addEventListener('click', async () => {
+      const text = elements.text.value.trim()
+      if (!text) {
+        addLog('❌ กรุณากรอกข้อความ', 'error')
+        return
+      }
+
+      if (!isConnected) {
+        addLog('❌ ยังไม่ได้เชื่อมต่อ WebSocket', 'error')
+        return
+      }
+
+      try {
+        elements.progressBar.classList.add('active')
+        currentChunk = 0
+        totalChunks = 0
+        updateProgress()
+
+        addLog(`📝 ข้อความที่ส่ง: "${text}"`, 'info')
+        addLog(`🎙️ Voice: ${elements.voiceId.value}, Model: ${elements.modelId.value}`, 'info')
+
+        await service.synthesize({
+          text: text,
+          voiceId: elements.voiceId.value,
+          modelId: elements.modelId.value,
+          stability: elements.stability.value,
+          similarityBoost: elements.similarityBoost.value,
+          style: elements.style.value,
+          speed: elements.speed.value
+        })
+
+        isPlaying = true
+        updateButtons()
+        addLog('🎤 เริ่มส่ง TTS request...', 'info')
+      } catch (error) {
+        addLog('❌ Error: ' + error.message, 'error')
+      }
+    })
+
+    // Stop button
+    elements.stopBtn.addEventListener('click', () => {
+      service.stop()
+      addLog('🛑 กดหยุด', 'info')
+    })
+
+    // Update progress bar
+    function updateProgress() {
+      if (totalChunks > 0) {
+        const percent = (currentChunk / totalChunks) * 100
+        elements.progressFill.style.width = percent + '%'
+        elements.progressText.textContent = `${currentChunk} / ${totalChunks}`
+      }
+    }
+
+    // Update button states
+    function updateButtons() {
+      elements.speakBtn.disabled = isPlaying
+      elements.stopBtn.disabled = !isPlaying
+    }
+
+    // Add log entry
+    function addLog(message, type = 'info') {
+      const entry = document.createElement('div')
+      entry.className = `log-entry ${type}`
+      const timestamp = new Date().toLocaleTimeString('th-TH')
+      entry.textContent = `[${timestamp}] ${message}`
+      elements.log.appendChild(entry)
+      elements.log.scrollTop = elements.log.scrollHeight
+    }
+
+    // Initialize on page load
+    initialize()
+  </script>
+</body>
+</html>

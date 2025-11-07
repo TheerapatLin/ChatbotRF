@@ -41,6 +41,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	elevenLabsCtrl := controllers.NewElevenLabsController(elevenLabsService)
 	wsCtrl := controllers.NewWebSocketController(messageRepo, personaRepo, fileAnalysisRepo, openaiService, bedrockService)
 	ttsWSCtrl := controllers.NewTTSWebSocketController(ttsService, personaRepo)
+	elevenLabsWSCtrl := controllers.NewElevenLabsWSController(elevenLabsService)
 	fileCtrl := controllers.NewFileController(fileService, fileAnalysisRepo, messageRepo)
 
 	// Initialize Bedrock controller
@@ -118,4 +119,17 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	// WebSocket endpoint for TTS streaming
 	app.Get("/api/ws/tts", websocket.New(ttsWSCtrl.HandleTTSWebSocket))
 	log.Println("✅ TTS WebSocket endpoint registered at: ws://localhost:3001/api/ws/tts")
+
+	// WebSocket upgrade middleware for ElevenLabs
+	app.Use("/api/ws/elevenlabs", func(c *fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			c.Locals("allowed", true)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
+
+	// WebSocket endpoint for ElevenLabs TTS streaming
+	app.Get("/api/ws/elevenlabs", websocket.New(elevenLabsWSCtrl.HandleElevenLabsWebSocket))
+	log.Println("✅ ElevenLabs WebSocket endpoint registered at: ws://localhost:3001/api/ws/elevenlabs")
 }

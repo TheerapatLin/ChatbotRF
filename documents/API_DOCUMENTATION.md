@@ -1,6 +1,6 @@
 # ChatBot API Documentation
 
-**Version:** 6.5 (2025-11-05)
+**Version:** 6.6 (2025-11-05)
 **Base URL:** `http://localhost:3001`
 
 ---
@@ -502,10 +502,75 @@ curl "http://localhost:3001/api/chats/session/session_123?limit=10&offset=10"
 - ✅ Returns messages in chronological order
 - ✅ Includes all message metadata (persona_id, tokens_used, etc.)
 
-### 2.6 Delete All Messages
+### 2.6 Delete Messages by Session
+```
+DELETE /api/chats/session/:sessionId
+```
+
+**Description:** Delete all messages for a specific session ID.
+
+**URL Parameters:**
+- `sessionId` (string, required) - Session ID to delete messages from
+
+**Response (200 OK):**
+```json
+{
+  "message": "Session messages deleted successfully",
+  "session_id": "session_123"
+}
+```
+
+**Error Responses:**
+```json
+// 400 Bad Request - Missing session ID
+{
+  "error": "Session ID is required"
+}
+
+// 500 Internal Server Error
+{
+  "error": "Failed to delete messages for session"
+}
+```
+
+**Example Usage:**
+```bash
+# Delete all messages from session_123
+curl -X DELETE http://localhost:3001/api/chats/session/session_123
+```
+
+**Features:**
+- ✅ Delete all messages in a specific session
+- ✅ Clean up chat history for individual conversations
+- ✅ Does not affect other sessions
+
+**Note:** This operation is irreversible. Deleted messages cannot be recovered.
+
+---
+
+### 2.7 Delete All Messages
 ```
 DELETE /api/chats
 ```
+
+**Description:** Delete ALL messages from the database (across all sessions).
+
+**Response (200 OK):**
+```json
+{
+  "message": "All messages deleted successfully"
+}
+```
+
+**Error Responses:**
+```json
+// 500 Internal Server Error
+{
+  "error": "Failed to delete messages"
+}
+```
+
+**Warning:** This deletes ALL messages from ALL sessions. Use with caution!
 
 ---
 
@@ -915,6 +980,11 @@ ws.onmessage = (event) => {
 ---
 
 ## 📌 Version History
+
+### v6.6 (2025-11-05) - Delete Messages by Session
+✅ DELETE /api/chats/session/:sessionId - Delete messages for specific session
+✅ Clean up individual chat history without affecting other sessions
+✅ Proper error handling and validation
 
 ### v6.5 (2025-11-05) - Chat History by Session
 ✅ GET /api/chats/session/:sessionId - Get messages filtered by session ID
