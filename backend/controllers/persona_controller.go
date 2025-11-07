@@ -251,11 +251,20 @@ func (ctrl *PersonaController) CreatePersona(c *fiber.Ctx) error {
 
 	// Validate model name
 	validModels := map[string]bool{
+		// OpenAI Models
 		"gpt-4o-mini":   true,
 		"gpt-4o":        true,
 		"gpt-4":         true,
 		"gpt-3.5-turbo": true,
-		"apac.anthropic.claude-sonnet-4-20250514-v1:0": true,
+		// AWS Bedrock - Cross-Region Inference (CRI) Models (Recommended)
+		"apac.anthropic.claude-sonnet-4-20250514-v1:0":   true,
+		"apac.anthropic.claude-3-5-sonnet-20241022-v2:0": true,
+		// "apac.amazon.titan-text-premier-v1:0":            true,
+		// "apac.amazon.titan-text-express-v1":              true,
+		// "apac.amazon.titan-text-lite-v1":                 true,
+		// AWS Bedrock - Standard Single-Region Models
+		"anthropic.claude-3-5-sonnet-20240620-v1:0": true,
+		// Legacy/Shorthand Names
 		"claude-sonnet-4": true,
 		"claude-3-opus":   true,
 		"claude-3-sonnet": true,
@@ -507,11 +516,26 @@ func (ctrl *PersonaController) UpdatePersona(c *fiber.Ctx) error {
 	if req.Model != nil {
 		// Validate model name
 		validModels := map[string]bool{
+			// OpenAI Models
 			"gpt-4o-mini":   true,
 			"gpt-4o":        true,
 			"gpt-4":         true,
 			"gpt-3.5-turbo": true,
-			"apac.anthropic.claude-sonnet-4-20250514-v1:0": true,
+			// AWS Bedrock - Cross-Region Inference (CRI) Models (Recommended)
+			"apac.anthropic.claude-sonnet-4-20250514-v1:0":   true,
+			"apac.anthropic.claude-3-5-sonnet-20241022-v2:0": true,
+			"apac.amazon.titan-text-premier-v1:0":            true,
+			"apac.amazon.titan-text-express-v1":              true,
+			"apac.amazon.titan-text-lite-v1":                 true,
+			// AWS Bedrock - Standard Single-Region Models
+			"anthropic.claude-3-5-sonnet-20241022-v2:0": true,
+			"anthropic.claude-3-5-sonnet-20240620-v1:0": true,
+			"anthropic.claude-3-sonnet-20240229-v1:0":   true,
+			"anthropic.claude-3-opus-20240229-v1:0":     true,
+			"amazon.titan-text-premier-v1:0":            true,
+			"amazon.titan-text-express-v1":              true,
+			"amazon.titan-text-lite-v1":                 true,
+			// Legacy/Shorthand Names
 			"claude-sonnet-4": true,
 			"claude-3-opus":   true,
 			"claude-3-sonnet": true,

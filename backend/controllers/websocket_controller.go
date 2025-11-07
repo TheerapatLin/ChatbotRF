@@ -52,6 +52,8 @@ type WSMessage struct {
 	SystemPrompt string   `json:"system_prompt"` // Optional custom system prompt
 	SessionID    string   `json:"session_id"`    // Session ID for conversation history
 	FileIDs      []string `json:"file_ids"`      // File IDs for current message only
+	Provider     string   `json:"provider"`      // AI provider: "openai" or "bedrock" (optional, auto-detect if empty)
+	Model        string   `json:"model"`         // Model ID (optional, use provider default if empty)
 }
 
 // WSResponse represents outgoing WebSocket messages
@@ -127,20 +129,43 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 		systemPrompt = systemPrompt + "\n\n--- Additional Instructions ---\n" + msg.SystemPrompt
 	}
 
-	// 4. Determine which AI provider to use (auto-detection)
+	// 4. Determine which AI provider to use
 	var streamingService services.StreamingChatService
 	var providerName string
 
-	if ctrl.openaiService != nil && ctrl.openaiService.IsAvailable() {
-		streamingService = ctrl.openaiService
-		providerName = "OpenAI"
-		log.Printf("🟢 Using OpenAI for WebSocket streaming")
-	} else if ctrl.bedrockService != nil && ctrl.bedrockService.IsAvailable() {
-		streamingService = ctrl.bedrockService
-		providerName = "Bedrock"
-		log.Printf("🔵 Using AWS Bedrock for WebSocket streaming")
+	// If provider is explicitly specified, use it
+	if msg.Provider != "" {
+		switch msg.Provider {
+		case "openai":
+			if ctrl.openaiService == nil || !ctrl.openaiService.IsAvailable() {
+				return fmt.Errorf("OpenAI provider not available (check OPENAI_API_KEY in .env)")
+			}
+			streamingService = ctrl.openaiService
+			providerName = "OpenAI"
+			log.Printf("🟢 Using OpenAI for WebSocket streaming (explicitly requested)")
+		case "bedrock":
+			if ctrl.bedrockService == nil || !ctrl.bedrockService.IsAvailable() {
+				return fmt.Errorf("bedrock provider not available (check AWS credentials in .env)")
+			}
+			streamingService = ctrl.bedrockService
+			providerName = "Bedrock"
+			log.Printf("🔵 Using AWS Bedrock for WebSocket streaming (explicitly requested)")
+		default:
+			return fmt.Errorf("invalid provider: %s (valid options: 'openai', 'bedrock')", msg.Provider)
+		}
 	} else {
-		return fmt.Errorf("no AI provider available (check OPENAI_API_KEY or AWS credentials in .env)")
+		// Auto-detect provider based on availability
+		if ctrl.openaiService != nil && ctrl.openaiService.IsAvailable() {
+			streamingService = ctrl.openaiService
+			providerName = "OpenAI"
+			log.Printf("🟢 Using OpenAI for WebSocket streaming (auto-detected)")
+		} else if ctrl.bedrockService != nil && ctrl.bedrockService.IsAvailable() {
+			streamingService = ctrl.bedrockService
+			providerName = "Bedrock"
+			log.Printf("🔵 Using AWS Bedrock for WebSocket streaming (auto-detected)")
+		} else {
+			return fmt.Errorf("no AI provider available (check OPENAI_API_KEY or AWS credentials in .env)")
+		}
 	}
 
 	// 5. Build context with history and files
@@ -211,6 +236,14 @@ func (ctrl *WebSocketController) handleMessage(ctx context.Context, c *websocket
 		SystemPrompt: systemPrompt,
 		Temperature:  0.7,
 		MaxTokens:    2000,
+		Model:        msg.Model, // Use custom model if specified, otherwise service will use default
+	}
+
+	// Log model selection
+	if msg.Model != "" {
+		log.Printf("📝 Using custom model: %s (provider: %s)", msg.Model, providerName)
+	} else {
+		log.Printf("📝 Using default model for provider: %s", providerName)
 	}
 
 	stream, err := streamingService.CreateStreamingChat(ctx, streamReq)

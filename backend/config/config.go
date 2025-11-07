@@ -102,7 +102,7 @@ func LoadConfig() *Config {
 		AWSAccessKeyID:     getEnv("AWS_ACCESS_KEY_ID", ""),
 		AWSSecretAccessKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
 		AWSRegion:          getEnv("AWS_REGION", "ap-southeast-1"),
-		BedrockModelID:     getEnv("BEDROCK_MODEL_ID", "anthropic.claude-sonnet-4-5-20250929-v1:0"),
+		BedrockModelID:     getEnv("BEDROCK_MODEL_ID", "apac.anthropic.claude-sonnet-4-20250514-v1:0"),
 		BedrockMaxTokens:   bedrockMaxTokens,
 		BedrockTemperature: bedrockTemperature,
 
