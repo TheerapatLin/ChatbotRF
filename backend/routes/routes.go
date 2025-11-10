@@ -82,8 +82,8 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	}
 
 	// Audio endpoints
-	api.Post("/audio/transcribe", audioCtrl.TranscribeAudio)
-	api.Post("/audio/tts", audioCtrl.TextToSpeech)
+	api.Post("/audio/stt/openai", audioCtrl.TranscribeAudio)
+	api.Post("/audio/tts/openai", audioCtrl.TextToSpeech)
 
 	// ElevenLabs endpoints
 	api.Post("/audio/elevenlabs/tts", elevenLabsCtrl.TextToSpeech)
