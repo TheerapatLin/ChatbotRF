@@ -1,0 +1,13 @@
+.git
+.gitignore
+node_modules
+.env*
+.vscode
+.idea
+*.log
+tmp
+temp
+dist
+build
+frontend/node_modules
+frontend/dist

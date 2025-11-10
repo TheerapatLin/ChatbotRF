@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -46,10 +47,11 @@ type Config struct {
 
 	// Whisper.cpp Configuration
 	WhisperBinaryPath       string
-	WhisperModelPath        string
+	WhisperModelPath        string // Default model path (for backward compatibility)
+	WhisperModelsDir        string // Directory containing all models
 	WhisperTempDir          string
 	WhisperLanguage         string
-	WhisperModelName        string
+	WhisperModelName        string // Default model name
 	WhisperThreads          int
 	WhisperProcessors       int
 	WhisperMaxLen           int
@@ -57,6 +59,7 @@ type Config struct {
 	WhisperBestOf           int
 	WhisperWordTimestamps   bool
 	WhisperSupportedLangs   string
+	WhisperSupportedModels  string // Comma-separated list of supported models
 }
 
 var AppConfig *Config
@@ -125,10 +128,11 @@ func LoadConfig() *Config {
 		// ElevenLabs
 		ElevenLabsAPIKey: getEnv("ELEVENLABS_API_KEY", ""),
 
-		// Whisper.cpp
-		WhisperBinaryPath:     getWhisperBinaryPath(),
-		WhisperModelPath:      getEnv("WHISPER_MODEL_PATH", "./backend/whisper/models/ggml-small.bin"),
-		WhisperTempDir:        getEnv("WHISPER_TEMP_DIR", "./backend/whisper/temp"),
+		// Whisper.cpp - แปลงเป็น absolute paths
+		WhisperBinaryPath:     getAbsolutePath(getWhisperBinaryPath()),
+		WhisperModelPath:      getAbsolutePath(getEnv("WHISPER_MODEL_PATH", "./whisper/models/ggml-small.bin")),
+		WhisperModelsDir:      getAbsolutePath(getEnv("WHISPER_MODELS_DIR", "./whisper/models")),
+		WhisperTempDir:        getAbsolutePath(getEnv("WHISPER_TEMP_DIR", "./whisper/temp")),
 		WhisperLanguage:       getEnv("WHISPER_LANGUAGE", "auto"),
 		WhisperModelName:      getEnv("WHISPER_MODEL_NAME", "small"),
 		WhisperThreads:        getEnvAsInt("WHISPER_THREADS", 4),
@@ -138,6 +142,7 @@ func LoadConfig() *Config {
 		WhisperBestOf:         getEnvAsInt("WHISPER_BEST_OF", 5),
 		WhisperWordTimestamps: getEnvAsBool("WHISPER_WORD_TIMESTAMPS", false),
 		WhisperSupportedLangs: getEnv("WHISPER_SUPPORTED_LANGUAGES", "th,en,auto"),
+		WhisperSupportedModels: getEnv("WHISPER_SUPPORTED_MODELS", "tiny.en,small,medium,large-v2"),
 	}
 
 	// Validate required configs
@@ -211,14 +216,56 @@ func getWhisperBinaryPath() string {
 		envKey = "WHISPER_BINARY_PATH_LINUX"
 	}
 
-	defaultPath := "./backend/whisper/binary/linux/main"
+	defaultPath := "./whisper/binary/linux/main"
 	if runtime.GOOS == "windows" {
-		defaultPath = "./backend/whisper/binary/windows/main.exe"
+		defaultPath = "./whisper/binary/windows/main.exe"
 	} else if runtime.GOOS == "darwin" {
-		defaultPath = "./backend/whisper/binary/macos/main"
+		defaultPath = "./whisper/binary/macos/main"
 	}
 
 	return getEnv(envKey, defaultPath)
+}
+
+// getProjectRoot หา project root directory โดยค้นหา go.mod
+func getProjectRoot() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+
+	// Search upward for go.mod
+	for {
+		goModPath := filepath.Join(dir, "go.mod")
+		if _, err := os.Stat(goModPath); err == nil {
+			return dir
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break // reached filesystem root
+		}
+		dir = parent
+	}
+
+	return "." // fallback to current directory
+}
+
+// getAbsolutePath แปลง relative path เป็น absolute path จาก project root
+func getAbsolutePath(relativePath string) string {
+	// ถ้าเป็น absolute path อยู่แล้ว, return ตรงๆ
+	if filepath.IsAbs(relativePath) {
+		return relativePath
+	}
+
+	// ลบ ./ ออกจาก path ถ้ามี
+	cleanRelPath := strings.TrimPrefix(relativePath, "./")
+
+	// แปลงเป็น absolute path จาก project root
+	projectRoot := getProjectRoot()
+	absPath := filepath.Join(projectRoot, cleanRelPath)
+
+	// Clean path (remove redundant separators, . and ..)
+	return filepath.Clean(absPath)
 }
 
 // GetConfig returns the application configuration

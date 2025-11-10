@@ -1,6 +1,6 @@
 # ChatBot API Documentation
 
-**Version:** 6.6 (2025-11-05)
+**Version:** 6.7 (2025-11-10)
 **Base URL:** `http://localhost:3001`
 
 ---
@@ -47,6 +47,8 @@ Database (PostgreSQL)
 - **ORM:** GORM
 - **Database:** PostgreSQL 15
 - **AI Providers:** OpenAI GPT-4, AWS Bedrock Claude Sonnet 4
+- **Speech-to-Text:** Whisper.cpp (local), OpenAI Whisper API
+- **Text-to-Speech:** OpenAI TTS, ElevenLabs
 - **WebSocket:** Fiber WebSocket adapter
 - **File Processing:** PDF/DOCX/XLSX extraction libraries
 
@@ -623,7 +625,156 @@ DELETE /api/file/uploads
 
 ## 4. 🎤 Audio API
 
-### Transcribe Audio (Whisper)
+### 4.1 Transcribe Audio (Whisper.cpp - Local)
+```
+POST /api/stt/whispercpp
+```
+
+**Description:** Transcribe audio using local Whisper.cpp engine (no API costs, runs locally).
+
+**Form Data:**
+- `audio` - Audio file (max 25 MB)
+- `language` - Language code: "th", "en", "auto" (default: "th")
+- `timestamps` - Boolean: return segments with timestamps (default: false)
+- `model` - Model name: "tiny.en", "small", "medium", "large-v2" (optional, default: "small")
+
+**Supported Audio Formats:** wav, mp3, m4a, ogg, webm
+
+**Response (without timestamps):**
+```json
+{
+  "success": true,
+  "transcription": "สวัสดีครับ ยินดีต้อนรับ",
+  "confidence": 0.95,
+  "language": "th",
+  "model": "small"
+}
+```
+
+**Response (with timestamps):**
+```json
+{
+  "success": true,
+  "transcription": "สวัสดีครับ ยินดีต้อนรับ",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 1.5,
+      "text": "สวัสดีครับ"
+    },
+    {
+      "start": 1.5,
+      "end": 3.0,
+      "text": "ยินดีต้อนรับ"
+    }
+  ],
+  "language": "th",
+  "duration": 3.0,
+  "model": "small"
+}
+```
+
+**Available Models:**
+- `tiny.en` - Fastest, English only, low accuracy (~75 MB)
+- `small` - Default, balanced speed and accuracy (~466 MB) ✅ Recommended
+- `medium` - Higher accuracy, slower (~1.5 GB)
+- `large-v2` - Highest accuracy, slowest (~3 GB)
+
+**Model Filename Formats Supported:**
+- Standard: `ggml-{modelName}.bin` (e.g., `ggml-small.bin`)
+- Quantized: `ggml-{modelName}-q5_1.bin` (e.g., `ggml-tiny-en-q5_1.bin`)
+
+**Example Usage:**
+```bash
+# Basic transcription (Thai, default model)
+curl -X POST http://localhost:3000/api/stt/whispercpp \
+  -F "audio=@recording.wav" \
+  -F "language=th"
+
+# English transcription with timestamps using tiny.en model
+curl -X POST http://localhost:3000/api/stt/whispercpp \
+  -F "audio=@english_audio.mp3" \
+  -F "language=en" \
+  -F "timestamps=true" \
+  -F "model=tiny.en"
+
+# Auto-detect language with medium model
+curl -X POST http://localhost:3000/api/stt/whispercpp \
+  -F "audio=@mixed_audio.wav" \
+  -F "language=auto" \
+  -F "model=medium"
+```
+
+**Error Responses:**
+```json
+// 400 Bad Request - Invalid language
+{
+  "success": false,
+  "error": "invalid language: fr (supported: th, en, auto)"
+}
+
+// 400 Bad Request - Unsupported format
+{
+  "success": false,
+  "error": "unsupported audio format: avi (supported: wav, mp3, m4a, ogg, webm)"
+}
+
+// 413 Payload Too Large
+{
+  "success": false,
+  "error": "file size exceeds maximum allowed (25MB)"
+}
+
+// 500 Internal Server Error - Model not found
+{
+  "success": false,
+  "error": "failed to transcribe audio",
+  "details": "model file not found: tried ggml-large-v3.bin and ggml-large-v3-q5_1.bin"
+}
+```
+
+**Features:**
+- ✅ No API costs (runs completely local)
+- ✅ Privacy-friendly (audio never leaves your server)
+- ✅ Dynamic model selection
+- ✅ Multi-language support (Thai, English, auto-detect)
+- ✅ Timestamp support for subtitles/transcripts
+- ✅ Flexible model filename conventions
+- ✅ WSL2 support on Windows
+- ✅ Cross-platform (Linux, Windows with WSL, macOS)
+
+---
+
+### 4.2 Get Whisper.cpp Status
+```
+GET /api/stt/whispercpp/status
+```
+
+**Description:** Check Whisper.cpp service availability and capabilities.
+
+**Response:**
+```json
+{
+  "service": "whisper.cpp",
+  "available": true,
+  "supported_formats": ["wav", "mp3", "m4a", "ogg", "webm"],
+  "supported_languages": ["th", "en", "auto"],
+  "supported_models": ["tiny.en", "small", "medium", "large-v2"],
+  "default_language": "auto",
+  "default_model": "small",
+  "current_os": "windows"
+}
+```
+
+**Use Cases:**
+- Check if Whisper.cpp binary is available
+- Get list of supported models before transcription
+- Validate audio format before upload
+- UI model selector configuration
+
+---
+
+### 4.3 Transcribe Audio (OpenAI Whisper API)
 ```
 POST /api/audio/transcribe
 ```
@@ -641,6 +792,8 @@ POST /api/audio/transcribe
   "duration": 3.5
 }
 ```
+
+**Note:** This endpoint uses OpenAI Whisper API (requires API key and incurs costs).
 
 ---
 
@@ -808,6 +961,21 @@ BEDROCK_TEMPERATURE=0.7
 
 # ElevenLabs (Optional)
 ELEVENLABS_API_KEY=...
+
+# Whisper.cpp Speech-to-Text (Local)
+WHISPER_BINARY_PATH_LINUX=./whisper/binary/linux/main
+WHISPER_BINARY_PATH_WINDOWS=wsl /mnt/c/Users/.../backend/whisper/binary/linux/main
+WHISPER_BINARY_PATH_MACOS=./whisper/binary/macos/main
+WHISPER_MODEL_PATH=./whisper/models/ggml-small.bin
+WHISPER_MODELS_DIR=./whisper/models
+WHISPER_TEMP_DIR=./whisper/temp
+WHISPER_LANGUAGE=auto
+WHISPER_MODEL_NAME=small
+WHISPER_SUPPORTED_MODELS=tiny.en,small,medium,large-v2
+WHISPER_THREADS=4
+WHISPER_PROCESSORS=1
+WHISPER_BEAM_SIZE=5
+WHISPER_BEST_OF=5
 
 # Provider Selection
 AI_PROVIDER=bedrock  # or "openai"
@@ -981,6 +1149,15 @@ ws.onmessage = (event) => {
 
 ## 📌 Version History
 
+### v6.7 (2025-11-10) - Whisper.cpp Dynamic Model Selection
+✅ Enhanced Whisper.cpp with dynamic model selection
+✅ Added `model` parameter to POST /api/stt/whispercpp
+✅ Support for multiple models: tiny.en, small, medium, large-v2
+✅ Flexible model filename conventions (standard & quantized formats)
+✅ Updated GET /api/stt/whispercpp/status with supported models list
+✅ Model validation and error handling
+✅ Backward compatibility with default model
+
 ### v6.6 (2025-11-05) - Delete Messages by Session
 ✅ DELETE /api/chats/session/:sessionId - Delete messages for specific session
 ✅ Clean up individual chat history without affecting other sessions
@@ -1042,7 +1219,8 @@ ws.onmessage = (event) => {
 - ✅ WebSocket Streaming (real-time responses)
 - ✅ 8 Pre-configured Personas + Custom Persona Creation
 - ✅ File Analysis (Text, PDF, DOCX, Images)
-- ✅ Speech-to-Text (OpenAI Whisper)
+- ✅ Speech-to-Text (Local Whisper.cpp + OpenAI Whisper API)
+- ✅ Dynamic Model Selection for Whisper.cpp (tiny.en, small, medium, large-v2)
 - ✅ Text-to-Speech (OpenAI TTS + ElevenLabs)
 - ✅ SSML Support for Advanced Speech Control
 - ✅ Conversation History

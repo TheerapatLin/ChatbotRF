@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bedrock WebSocket Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-family: inherit;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        .btn-connect {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-connect:hover {
+            background: #45a049;
+        }
+        .btn-send {
+            background: #2196F3;
+            color: white;
+            flex: 1;
+        }
+        .btn-send:hover {
+            background: #0b7dda;
+        }
+        .btn-disconnect {
+            background: #f44336;
+            color: white;
+        }
+        .btn-disconnect:hover {
+            background: #da190b;
+        }
+        .btn-clear {
+            background: #666;
+            color: white;
+        }
+        .btn-clear:hover {
+            background: #555;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #response {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-left: 10px;
+        }
+        .status-disconnected {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .status-connected {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .status-connecting {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
+        .message-user {
+            color: #1976d2;
+            font-weight: 600;
+        }
+        .message-assistant {
+            color: #388e3c;
+        }
+        .message-error {
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        .divider {
+            border-top: 2px solid #e0e0e0;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔵 AWS Bedrock WebSocket Test</h1>
+        <p class="subtitle">Test real-time streaming chat with AWS Bedrock Claude model</p>
+
+        <div class="form-group">
+            <label>WebSocket URL:</label>
+            <input type="text" id="wsUrl" value="ws://localhost:3001/api/chat/stream" />
+        </div>
+
+        <div class="form-group">
+            <label>AI Provider:</label>
+            <select id="provider" onchange="updateModelOptions()">
+                <option value="">Auto-detect</option>
+                <option value="bedrock" selected>AWS Bedrock</option>
+                <option value="openai">OpenAI</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Model ID:</label>
+            <select id="model">
+                <option value="">Use default model</option>
+                <optgroup label="AWS Bedrock - Claude (CRI)" id="bedrock-cri-claude">
+                    <option value="apac.anthropic.claude-sonnet-4-20250514-v1:0" selected>Claude Sonnet 4 (CRI)</option>
+                    <option value="apac.anthropic.claude-3-5-sonnet-20241022-v2:0">Claude 3.5 Sonnet v2 (CRI)</option>
+                </optgroup>
+                <optgroup label="AWS Bedrock - Titan (CRI)" id="bedrock-cri-titan">
+                    <option value="apac.amazon.titan-text-premier-v1:0">Titan Text Premier (CRI)</option>
+                    <option value="apac.amazon.titan-text-express-v1">Titan Text Express (CRI)</option>
+                    <option value="apac.amazon.titan-text-lite-v1">Titan Text Lite (CRI)</option>
+                </optgroup>
+                <optgroup label="AWS Bedrock - Standard" id="bedrock-std">
+                    <option value="anthropic.claude-3-5-sonnet-20241022-v2:0">Claude 3.5 Sonnet v2</option>
+                    <option value="anthropic.claude-3-5-sonnet-20240620-v1:0">Claude 3.5 Sonnet v1</option>
+                    <option value="anthropic.claude-3-sonnet-20240229-v1:0">Claude 3 Sonnet</option>
+                    <option value="anthropic.claude-3-opus-20240229-v1:0">Claude 3 Opus</option>
+                    <option value="amazon.titan-text-premier-v1:0">Titan Text Premier</option>
+                    <option value="amazon.titan-text-express-v1">Titan Text Express</option>
+                    <option value="amazon.titan-text-lite-v1">Titan Text Lite</option>
+                </optgroup>
+                <optgroup label="OpenAI" id="openai-models" style="display: none;">
+                    <option value="gpt-4o">GPT-4o</option>
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="gpt-4">GPT-4</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                </optgroup>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Persona ID:</label>
+            <input type="number" id="personaId" value="1" min="1" />
+        </div>
+
+        <div class="form-group">
+            <label>Session ID (Optional - for conversation history):</label>
+            <input type="text" id="sessionId" placeholder="Leave empty for auto-generation" />
+        </div>
+
+        <div class="button-group">
+            <button class="btn-connect" onclick="connect()" id="connectBtn">Connect</button>
+            <button class="btn-disconnect" onclick="disconnect()" id="disconnectBtn" disabled>Disconnect</button>
+            <button class="btn-clear" onclick="clearResponse()">Clear Response</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="form-group">
+            <label>Your Message:</label>
+            <textarea id="message" placeholder="Enter your message here...">สวัสดีครับ ช่วยอธิบายเกี่ยวกับ AWS Bedrock</textarea>
+        </div>
+
+        <div class="button-group">
+            <button class="btn-send" onclick="sendMessage()" id="sendBtn" disabled>Send Message</button>
+        </div>
+
+        <h3>Response: <span id="statusBadge" class="status status-disconnected">Disconnected</span></h3>
+        <div id="response">Waiting for connection...</div>
+    </div>
+
+    <script>
+        let ws = null;
+        let currentResponse = '';
+
+        function updateStatus(status) {
+            const badge = document.getElementById('statusBadge');
+            badge.className = 'status status-' + status;
+            badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+        }
+
+        function connect() {
+            const wsUrl = document.getElementById('wsUrl').value;
+
+            try {
+                ws = new WebSocket(wsUrl);
+                updateStatus('connecting');
+
+                ws.onopen = () => {
+                    appendResponse('[SYSTEM] ✅ Connected to ' + wsUrl + '\n\n');
+                    updateStatus('connected');
+                    document.getElementById('connectBtn').disabled = true;
+                    document.getElementById('disconnectBtn').disabled = false;
+                    document.getElementById('sendBtn').disabled = false;
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log('Received:', data);
+
+                        if (data.type === 'error') {
+                            appendResponse('\n[ERROR] ' + data.error + '\n\n', 'error');
+                            currentResponse = '';
+                        } else if (data.type === 'chunk') {
+                            if (data.done) {
+                                // Stream completed
+                                appendResponse('\n\n[DONE] ✅ Message ID: ' + (data.message_id || 'N/A') +
+                                             ' | Tokens: ' + (data.tokens_used || 'N/A') + '\n');
+                                appendResponse('─'.repeat(80) + '\n\n');
+                                currentResponse = '';
+                            } else {
+                                // Streaming chunk
+                                currentResponse += data.content;
+                                updateCurrentResponse();
+                            }
+                        } else if (data.type === 'content') {
+                            // Legacy support: Streaming content
+                            currentResponse += data.content;
+                            updateCurrentResponse();
+                        } else if (data.type === 'done') {
+                            // Legacy support: Stream completed
+                            appendResponse('\n\n[DONE] Tokens used: ' + (data.tokens_used || 'N/A') + '\n');
+                            appendResponse('─'.repeat(80) + '\n\n');
+                            currentResponse = '';
+                        }
+                    } catch (e) {
+                        appendResponse('[ERROR] Failed to parse message: ' + e.message + '\n', 'error');
+                        console.error('Parse error:', e);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    appendResponse('[ERROR] WebSocket error occurred\n', 'error');
+                    console.error('WebSocket error:', error);
+                };
+
+                ws.onclose = () => {
+                    appendResponse('\n[SYSTEM] ❌ Disconnected from server\n\n');
+                    updateStatus('disconnected');
+                    document.getElementById('connectBtn').disabled = false;
+                    document.getElementById('disconnectBtn').disabled = true;
+                    document.getElementById('sendBtn').disabled = true;
+                    ws = null;
+                };
+            } catch (error) {
+                appendResponse('[ERROR] Failed to connect: ' + error.message + '\n', 'error');
+                updateStatus('disconnected');
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+
+        function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Please connect first!');
+                return;
+            }
+
+            const message = document.getElementById('message').value;
+            const provider = document.getElementById('provider').value;
+            const model = document.getElementById('model').value;
+            const personaId = parseInt(document.getElementById('personaId').value);
+            const sessionId = document.getElementById('sessionId').value;
+
+            if (!message.trim()) {
+                alert('Please enter a message!');
+                return;
+            }
+
+            const payload = {
+                type: 'message',
+                content: message,
+                persona_id: personaId
+            };
+
+            if (provider.trim()) {
+                payload.provider = provider;
+            }
+
+            if (model.trim()) {
+                payload.model = model;
+            }
+
+            if (sessionId.trim()) {
+                payload.session_id = sessionId;
+            }
+
+            const modelInfo = model || 'default';
+            const providerInfo = provider || 'auto';
+            appendResponse('👤 USER [' + providerInfo + ' | ' + modelInfo + ']: ' + message + '\n\n', 'user');
+            appendResponse('🤖 ASSISTANT: ', 'assistant');
+            currentResponse = '';
+
+            console.log('Sending payload:', payload);
+            ws.send(JSON.stringify(payload));
+        }
+
+        function updateModelOptions() {
+            const provider = document.getElementById('provider').value;
+            const bedrockCriClaude = document.getElementById('bedrock-cri-claude');
+            const bedrockCriTitan = document.getElementById('bedrock-cri-titan');
+            const bedrockStd = document.getElementById('bedrock-std');
+            const openaiModels = document.getElementById('openai-models');
+
+            if (provider === 'bedrock') {
+                bedrockCriClaude.style.display = '';
+                bedrockCriTitan.style.display = '';
+                bedrockStd.style.display = '';
+                openaiModels.style.display = 'none';
+                document.getElementById('model').selectedIndex = 1; // Select first Bedrock model
+            } else if (provider === 'openai') {
+                bedrockCriClaude.style.display = 'none';
+                bedrockCriTitan.style.display = 'none';
+                bedrockStd.style.display = 'none';
+                openaiModels.style.display = '';
+                document.getElementById('model').selectedIndex = 8; // Select first OpenAI model
+            } else {
+                // Auto-detect: show all
+                bedrockCriClaude.style.display = '';
+                bedrockCriTitan.style.display = '';
+                bedrockStd.style.display = '';
+                openaiModels.style.display = '';
+                document.getElementById('model').selectedIndex = 0; // Select "Use default"
+            }
+        }
+
+        function updateCurrentResponse() {
+            const responseDiv = document.getElementById('response');
+            const lines = responseDiv.innerHTML.split('\n');
+            const lastLineIndex = lines.length - 1;
+
+            // Update the last line with current streaming response
+            if (lastLineIndex >= 0) {
+                const prefix = lines[lastLineIndex].split('ASSISTANT: ')[0];
+                if (prefix.includes('ASSISTANT:')) {
+                    lines[lastLineIndex] = prefix + 'ASSISTANT: ' + escapeHtml(currentResponse);
+                    responseDiv.innerHTML = lines.join('\n');
+                }
+            }
+
+            // Auto-scroll to bottom
+            responseDiv.scrollTop = responseDiv.scrollHeight;
+        }
+
+        function appendResponse(text, type = '') {
+            const responseDiv = document.getElementById('response');
+
+            if (responseDiv.textContent === 'Waiting for connection...') {
+                responseDiv.textContent = '';
+            }
+
+            let formattedText = text;
+            if (type === 'user') {
+                formattedText = '<span class="message-user">' + escapeHtml(text) + '</span>';
+            } else if (type === 'assistant') {
+                formattedText = '<span class="message-assistant">' + escapeHtml(text) + '</span>';
+            } else if (type === 'error') {
+                formattedText = '<div class="message-error">' + escapeHtml(text) + '</div>';
+            } else {
+                formattedText = escapeHtml(text);
+            }
+
+            responseDiv.innerHTML += formattedText;
+            responseDiv.scrollTop = responseDiv.scrollHeight;
+        }
+
+        function clearResponse() {
+            document.getElementById('response').textContent = 'Response cleared. Ready for new messages.';
+            currentResponse = '';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Allow Enter key to send message (Ctrl+Enter for new line)
+        document.getElementById('message').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.ctrlKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -34,6 +34,13 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 		log.Printf("   Bedrock endpoints will not be available")
 	}
 
+	// Initialize Whisper.cpp service
+	whisperService, err := services.NewWhisperCppService(cfg)
+	if err != nil {
+		log.Printf("⚠️ Warning: Failed to initialize Whisper.cpp service: %v", err)
+		log.Printf("   Whisper.cpp endpoints will not be available")
+	}
+
 	// Initialize controllers
 	chatCtrl := controllers.NewChatController(messageRepo, personaRepo, fileAnalysisRepo, openaiService)
 	personaCtrl := controllers.NewPersonaController(personaRepo, messageRepo)
@@ -48,6 +55,12 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	var bedrockCtrl *controllers.BedrockController
 	if bedrockService != nil {
 		bedrockCtrl = controllers.NewBedrockController(bedrockService, personaRepo, messageRepo, contextService, fileAnalysisRepo)
+	}
+
+	// Initialize Whisper.cpp controller
+	var whisperCtrl *controllers.WhisperCppController
+	if whisperService != nil {
+		whisperCtrl = controllers.NewWhisperCppController(whisperService)
 	}
 
 	// API group
@@ -88,6 +101,21 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	// ElevenLabs endpoints
 	api.Post("/audio/elevenlabs/tts", elevenLabsCtrl.TextToSpeech)
 	api.Get("/audio/elevenlabs/voices", elevenLabsCtrl.GetVoices)
+
+	// ========================================
+	// Speech-to-Text (STT) Routes
+	// ========================================
+	if whisperCtrl != nil {
+		sttGroup := api.Group("/stt")
+
+		// Whisper.cpp endpoints
+		sttGroup.Get("/whispercpp/status", whisperCtrl.GetStatus)
+		sttGroup.Post("/whispercpp", whisperCtrl.TranscribeAudio)
+
+		log.Println("✅ Whisper.cpp endpoints registered:")
+		log.Println("   GET  /api/stt/whispercpp/status")
+		log.Println("   POST /api/stt/whispercpp")
+	}
 
 	// File upload endpoints
 	api.Post("/file/uploads", fileCtrl.UploadFiles)

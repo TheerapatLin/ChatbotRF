@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TTS WebSocket Test</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
+    }
+
+    h1 {
+      color: #667eea;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+
+    .status.connected {
+      background: #4caf50;
+      color: white;
+    }
+
+    .status.disconnected {
+      background: #f44336;
+      color: white;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 16px;
+      resize: vertical;
+      margin-bottom: 20px;
+      font-family: inherit;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .options {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .option-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    label {
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 5px;
+      color: #555;
+    }
+
+    select, input[type="range"] {
+      padding: 10px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    select:focus, input[type="range"]:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .progress-bar {
+      position: relative;
+      height: 30px;
+      background: #e0e0e0;
+      border-radius: 8px;
+      margin: 15px 0;
+      overflow: hidden;
+      display: none;
+    }
+
+    .progress-bar.active {
+      display: block;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      transition: width 0.3s ease;
+    }
+
+    .progress-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 12px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      flex: 1;
+      padding: 15px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-family: inherit;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #5568d3;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-danger {
+      background: #f44336;
+      color: white;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: #d32f2f;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(244, 67, 54, 0.4);
+    }
+
+    .btn-warning {
+      background: #ff9800;
+      color: white;
+    }
+
+    .btn-warning:hover:not(:disabled) {
+      background: #f57c00;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(255, 152, 0, 0.4);
+    }
+
+    .error-message {
+      margin-top: 15px;
+      padding: 15px;
+      background: #ffebee;
+      color: #c62828;
+      border-radius: 8px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .error-message.active {
+      display: block;
+    }
+
+    .log {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+    }
+
+    .log-entry {
+      margin-bottom: 5px;
+      padding: 5px;
+      border-radius: 4px;
+    }
+
+    .log-entry.info {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+
+    .log-entry.success {
+      background: #e8f5e9;
+      color: #388e3c;
+    }
+
+    .log-entry.error {
+      background: #ffebee;
+      color: #c62828;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔊 TTS WebSocket Test</h1>
+    <span id="status" class="status disconnected">ไม่ได้เชื่อมต่อ</span>
+
+    <textarea
+      id="text"
+      rows="4"
+      placeholder="กรอกข้อความที่ต้องการแปลงเป็นเสียง...">สวัสดีครับ นี่คือการทดสอบระบบแปลงข้อความเป็นเสียงแบบ real-time</textarea>
+
+    <div class="options">
+      <div class="option-group">
+        <label>เสียง</label>
+        <select id="voice">
+          <option value="alloy">Alloy (เป็นกลาง)</option>
+          <option value="echo">Echo (ชาย)</option>
+          <option value="fable">Fable (อังกฤษ)</option>
+          <option value="onyx">Onyx (ทุ้ม)</option>
+          <option value="nova" selected>Nova (หญิง)</option>
+          <option value="shimmer">Shimmer (นุ่ม)</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label>Model</label>
+        <select id="model">
+          <option value="gpt-4o-mini-tts" selected>GPT-4o Mini TTS (แนะนำ)</option>
+          <option value="tts-1">TTS-1 (Standard)</option>
+          <option value="tts-1-hd">TTS-1 HD (High Quality)</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label>ความเร็ว: <span id="speedValue">1.0</span></label>
+        <input
+          type="range"
+          id="speed"
+          min="0.25"
+          max="4.0"
+          step="0.25"
+          value="1.0">
+      </div>
+
+      <div class="option-group">
+        <label>อารมณ์</label>
+        <select id="emotion">
+          <option value="neutral">เป็นกลาง</option>
+          <option value="happy">ร่าเริง</option>
+          <option value="sad">เศร้า</option>
+          <option value="excited">ตื่นเต้น</option>
+          <option value="calm">สงบ</option>
+          <option value="serious">จริงจัง</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label>สไตล์</label>
+        <select id="style">
+          <option value="formal">เป็นทางการ</option>
+          <option value="casual">ไม่เป็นทางการ</option>
+          <option value="empathetic">เห็นอกเห็นใจ</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="progressBar" class="progress-bar">
+      <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+      <span id="progressText" class="progress-text">0 / 0</span>
+    </div>
+
+    <div class="controls">
+      <button id="speakBtn" class="btn-primary">🎤 พูด</button>
+      <button id="stopBtn" class="btn-danger" disabled>⏹️ หยุด</button>
+      <button id="pauseBtn" class="btn-warning" disabled>⏸️ พัก</button>
+    </div>
+
+    <div id="errorMessage" class="error-message"></div>
+
+    <div class="log" id="log"></div>
+  </div>
+
+  <script>
+    // TTS WebSocket Service
+    class TTSWebSocketService {
+      constructor() {
+        this.ws = null
+        this.audioQueue = []
+        this.isPlaying = false
+        this.sessionId = null
+        this.audioContext = null
+        this.sourceNode = null
+
+        this.onChunk = null
+        this.onComplete = null
+        this.onError = null
+        this.onStopped = null
+      }
+
+      connect() {
+        return new Promise((resolve, reject) => {
+          const wsUrl = 'ws://localhost:3001/api'
+          this.ws = new WebSocket(`${wsUrl}/ws/tts`)
+
+          this.ws.onopen = () => {
+            console.log('✅ TTS WebSocket เชื่อมต่อแล้ว')
+            resolve()
+          }
+
+          this.ws.onerror = (error) => {
+            console.error('❌ TTS WebSocket error:', error)
+            reject(new Error('WebSocket connection failed'))
+          }
+
+          this.ws.onmessage = (event) => {
+            this.handleMessage(JSON.parse(event.data))
+          }
+
+          this.ws.onclose = () => {
+            console.log('TTS WebSocket ตัดการเชื่อมต่อ')
+            this.cleanup()
+          }
+        })
+      }
+
+      async synthesize(options) {
+        const {
+          text,
+          model = 'gpt-4o-mini-tts',
+          voice = 'nova',
+          speed = 1.0,
+          emotionRange = 'neutral',
+          styleHint = 'casual'
+        } = options
+
+        this.sessionId = `tts_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        this.stop()
+
+        const message = {
+          type: 'tts',
+          session_id: this.sessionId,
+          text,
+          model,
+          voice,
+          speed,
+          emotion_range: emotionRange,
+          style_hint: styleHint
+        }
+
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify(message))
+        } else {
+          throw new Error('WebSocket ไม่ได้เชื่อมต่อ')
+        }
+      }
+
+      handleMessage(data) {
+        switch (data.type) {
+          case 'audio_chunk':
+            this.handleAudioChunk(data)
+            if (this.onChunk) this.onChunk(data)
+            break
+          case 'completed':
+            this.handleComplete(data)
+            if (this.onComplete) this.onComplete(data)
+            break
+          case 'error':
+            console.error('TTS Error:', data.error)
+            if (this.onError) this.onError(data.error)
+            break
+          case 'stopped':
+            console.log('TTS หยุดแล้ว')
+            if (this.onStopped) this.onStopped()
+            break
+        }
+      }
+
+      handleAudioChunk(data) {
+        const audioData = this.base64ToArrayBuffer(data.audio_data)
+        this.audioQueue.push({
+          data: audioData,
+          format: data.format,
+          index: data.chunk_index
+        })
+
+        if (!this.isPlaying) {
+          this.playQueue()
+        }
+      }
+
+      async playQueue() {
+        if (this.audioQueue.length === 0) {
+          this.isPlaying = false
+          return
+        }
+
+        this.isPlaying = true
+        const chunk = this.audioQueue.shift()
+
+        try {
+          if (!this.audioContext) {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)()
+          }
+
+          const audioBuffer = await this.audioContext.decodeAudioData(chunk.data)
+          this.sourceNode = this.audioContext.createBufferSource()
+          this.sourceNode.buffer = audioBuffer
+          this.sourceNode.connect(this.audioContext.destination)
+          this.sourceNode.start(0)
+
+          this.sourceNode.onended = () => {
+            this.playQueue()
+          }
+        } catch (error) {
+          console.error('Error playing audio chunk:', error)
+          this.playQueue()
+        }
+      }
+
+      stop() {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN && this.sessionId) {
+          this.ws.send(JSON.stringify({
+            type: 'stop',
+            session_id: this.sessionId
+          }))
+        }
+
+        if (this.sourceNode) {
+          try {
+            this.sourceNode.stop()
+          } catch (e) {}
+          this.sourceNode = null
+        }
+
+        this.audioQueue = []
+        this.isPlaying = false
+      }
+
+      pause() {
+        if (this.audioContext && this.audioContext.state === 'running') {
+          this.audioContext.suspend()
+        }
+      }
+
+      resume() {
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+          this.audioContext.resume()
+        }
+      }
+
+      handleComplete(data) {
+        console.log('✅ TTS เสร็จสมบูรณ์:', data)
+      }
+
+      cleanup() {
+        this.stop()
+        if (this.audioContext) {
+          this.audioContext.close()
+          this.audioContext = null
+        }
+      }
+
+      disconnect() {
+        this.cleanup()
+        if (this.ws) {
+          this.ws.close()
+          this.ws = null
+        }
+      }
+
+      base64ToArrayBuffer(base64) {
+        const binaryString = window.atob(base64)
+        const len = binaryString.length
+        const bytes = new Uint8Array(len)
+
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i)
+        }
+
+        return bytes.buffer
+      }
+    }
+
+    /**
+     * สร้างคำสั่งอารมณ์และสไตล์สำหรับ TTS
+     * @param {string} emotion - อารมณ์ที่เลือก
+     * @param {string} style - สไตล์ที่เลือก
+     * @returns {string} คำสั่งที่จะต่อท้ายข้อความ
+     */
+    function buildEmotionInstruction(emotion, style) {
+      const emotionMap = {
+        'neutral': 'เป็นกลาง',
+        'happy': 'ร่าเริง สนุกสนาน',
+        'sad': 'เศร้า เสียใจ',
+        'excited': 'ตื่นเต้น กระตือรือร้น',
+        'calm': 'สงบ ใจเย็น',
+        'serious': 'จริงจัง เคร่งขรึม'
+      }
+
+      const styleMap = {
+        'formal': 'เป็นทางการ',
+        'casual': 'สบายๆ ไม่เป็นทางการ',
+        'empathetic': 'เห็นอกเห็นใจ เข้าใจ'
+      }
+
+      const emotionText = emotionMap[emotion] || emotion
+      const styleText = styleMap[style] || style
+
+      // สร้างคำสั่งภาษาไทยและภาษาอังกฤษ
+      if (emotion === 'neutral' && style === 'formal') {
+        return '' // ไม่ต้องเพิ่มคำสั่ง ถ้าเป็น default
+      }
+
+      return `[ใช้น้ำเสียงที่${emotionText} แบบ${styleText}. Use ${emotion} tone with ${style} style]`
+    }
+
+    // UI Management
+    const ttsService = new TTSWebSocketService()
+    let isConnected = false
+    let isPlaying = false
+    let currentChunk = 0
+    let totalChunks = 0
+
+    const elements = {
+      status: document.getElementById('status'),
+      text: document.getElementById('text'),
+      voice: document.getElementById('voice'),
+      model: document.getElementById('model'),
+      speed: document.getElementById('speed'),
+      speedValue: document.getElementById('speedValue'),
+      emotion: document.getElementById('emotion'),
+      style: document.getElementById('style'),
+      speakBtn: document.getElementById('speakBtn'),
+      stopBtn: document.getElementById('stopBtn'),
+      pauseBtn: document.getElementById('pauseBtn'),
+      progressBar: document.getElementById('progressBar'),
+      progressFill: document.getElementById('progressFill'),
+      progressText: document.getElementById('progressText'),
+      errorMessage: document.getElementById('errorMessage'),
+      log: document.getElementById('log')
+    }
+
+    // Update speed value display
+    elements.speed.addEventListener('input', (e) => {
+      elements.speedValue.textContent = e.target.value
+    })
+
+    // Connect on page load
+    async function initialize() {
+      try {
+        addLog('กำลังเชื่อมต่อ WebSocket...', 'info')
+        await ttsService.connect()
+        isConnected = true
+        elements.status.textContent = 'เชื่อมต่อแล้ว'
+        elements.status.className = 'status connected'
+        addLog('✅ เชื่อมต่อสำเร็จ', 'success')
+      } catch (error) {
+        isConnected = false
+        elements.status.textContent = 'ไม่ได้เชื่อมต่อ'
+        elements.status.className = 'status disconnected'
+        showError('ไม่สามารถเชื่อมต่อ WebSocket: ' + error.message)
+        addLog('❌ เชื่อมต่อล้มเหลว: ' + error.message, 'error')
+      }
+    }
+
+    // Setup callbacks
+    ttsService.onChunk = (data) => {
+      isPlaying = true
+      currentChunk = data.chunk_index + 1
+      totalChunks = data.total_chunks || 0
+      updateProgress()
+      updateButtons()
+      addLog(`📦 รับ chunk ${currentChunk}/${totalChunks}`, 'info')
+    }
+
+    ttsService.onComplete = (data) => {
+      isPlaying = false
+      elements.progressBar.classList.remove('active')
+      updateButtons()
+      addLog('✅ เล่นเสียงเสร็จสมบูรณ์', 'success')
+    }
+
+    ttsService.onError = (error) => {
+      isPlaying = false
+      showError(error)
+      updateButtons()
+      addLog('❌ Error: ' + error, 'error')
+    }
+
+    ttsService.onStopped = () => {
+      isPlaying = false
+      elements.progressBar.classList.remove('active')
+      updateButtons()
+      addLog('⏹️ หยุดเล่นเสียงแล้ว', 'info')
+    }
+
+    // Speak button
+    elements.speakBtn.addEventListener('click', async () => {
+      const text = elements.text.value.trim()
+      if (!text) {
+        showError('กรุณากรอกข้อความ')
+        return
+      }
+
+      if (!isConnected) {
+        showError('ยังไม่ได้เชื่อมต่อ WebSocket')
+        return
+      }
+
+      try {
+        hideError()
+        elements.progressBar.classList.add('active')
+        currentChunk = 0
+        totalChunks = 0
+        updateProgress()
+
+        // รวมอารมณ์และสไตล์เข้ากับข้อความ
+        const emotion = elements.emotion.value
+        const style = elements.style.value
+        const emotionInstruction = buildEmotionInstruction(emotion, style)
+        const finalText = emotionInstruction ? text + ' ' + emotionInstruction : text
+
+        addLog(`📝 ข้อความที่ส่ง: ${finalText}`, 'info')
+
+        await ttsService.synthesize({
+          text: finalText,                    // ส่งข้อความที่รวม instruction แล้ว
+          model: elements.model.value,        // เพิ่มการส่ง model
+          voice: elements.voice.value,
+          speed: parseFloat(elements.speed.value),
+          emotionRange: emotion,              // ยังคงส่งไปเพื่อ voice mapping
+          styleHint: style                    // ยังคงส่งไปเพื่อ voice mapping
+        })
+
+        isPlaying = true
+        updateButtons()
+        addLog('🎤 เริ่มส่ง TTS request...', 'info')
+      } catch (error) {
+        showError('เกิดข้อผิดพลาด: ' + error.message)
+        addLog('❌ Error: ' + error.message, 'error')
+      }
+    })
+
+    // Stop button
+    elements.stopBtn.addEventListener('click', () => {
+      ttsService.stop()
+      addLog('🛑 กดหยุด', 'info')
+    })
+
+    // Pause button
+    elements.pauseBtn.addEventListener('click', () => {
+      if (ttsService.audioContext && ttsService.audioContext.state === 'running') {
+        ttsService.pause()
+        elements.pauseBtn.textContent = '▶️ เล่นต่อ'
+        addLog('⏸️ พัก', 'info')
+      } else {
+        ttsService.resume()
+        elements.pauseBtn.textContent = '⏸️ พัก'
+        addLog('▶️ เล่นต่อ', 'info')
+      }
+    })
+
+    // Update progress bar
+    function updateProgress() {
+      if (totalChunks > 0) {
+        const percent = (currentChunk / totalChunks) * 100
+        elements.progressFill.style.width = percent + '%'
+        elements.progressText.textContent = `${currentChunk} / ${totalChunks}`
+      }
+    }
+
+    // Update button states
+    function updateButtons() {
+      elements.speakBtn.disabled = isPlaying
+      elements.stopBtn.disabled = !isPlaying
+      elements.pauseBtn.disabled = !isPlaying
+    }
+
+    // Show error message
+    function showError(message) {
+      elements.errorMessage.textContent = '❌ ' + message
+      elements.errorMessage.classList.add('active')
+    }
+
+    // Hide error message
+    function hideError() {
+      elements.errorMessage.classList.remove('active')
+    }
+
+    // Add log entry
+    function addLog(message, type = 'info') {
+      const entry = document.createElement('div')
+      entry.className = `log-entry ${type}`
+      const timestamp = new Date().toLocaleTimeString('th-TH')
+      entry.textContent = `[${timestamp}] ${message}`
+      elements.log.appendChild(entry)
+      elements.log.scrollTop = elements.log.scrollHeight
+    }
+
+    // Initialize on page load
+    initialize()
+  </script>
+</body>
+</html>

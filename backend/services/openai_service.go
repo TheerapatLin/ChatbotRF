@@ -128,15 +128,15 @@ func (s *OpenAIService) BuildContextMessages(userMessage string, recentMessages 
 	return messages
 }
 
-// TranscriptionResponse represents the response from Whisper API
-type TranscriptionResponse struct {
+// OpenAITranscriptionResponse represents the response from OpenAI Whisper API
+type OpenAITranscriptionResponse struct {
 	Text     string
 	Language string
 	Duration float64
 }
 
 // TranscribeAudio transcribes audio file using OpenAI Whisper API
-func (s *OpenAIService) TranscribeAudio(file io.Reader, filename string) (*TranscriptionResponse, error) {
+func (s *OpenAIService) TranscribeAudio(file io.Reader, filename string) (*OpenAITranscriptionResponse, error) {
 	ctx := context.Background()
 
 	// Create audio transcription request
@@ -153,7 +153,7 @@ func (s *OpenAIService) TranscribeAudio(file io.Reader, filename string) (*Trans
 	}
 
 	// Build response (duration is mock for now as API doesn't return it)
-	return &TranscriptionResponse{
+	return &OpenAITranscriptionResponse{
 		Text:     resp.Text,
 		Language: resp.Language,
 		Duration: 0, // Whisper API doesn't return duration

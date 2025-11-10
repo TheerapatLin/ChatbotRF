@@ -1,11 +1,13 @@
 <script setup>
 import { PersonaSidebar } from './components/persona'
+import SessionSidebar from './components/session/SessionSidebar.vue'
 import { ChatLog, ChatInput } from './components/chat'
 </script>
 
 <template>
   <div class="app">
     <PersonaSidebar />
+    <SessionSidebar />
 
     <main class="main-content">
       <div class="chat-container">

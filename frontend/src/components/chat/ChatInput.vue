@@ -1,5 +1,8 @@
 <template>
   <div class="chat-input">
+    <!-- Model Selector -->
+    <ModelSelector />
+
     <!-- File Preview -->
     <Transition name="slide-up">
       <div v-if="selectedFiles.length > 0" class="file-preview">
@@ -90,6 +93,7 @@ import { ref, computed, nextTick } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { usePersonaStore } from '@/stores/persona'
 import { useFileStore } from '@/stores/file'
+import ModelSelector from './ModelSelector.vue'
 
 const chatStore = useChatStore()
 const personaStore = usePersonaStore()
