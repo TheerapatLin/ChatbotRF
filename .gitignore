@@ -75,3 +75,12 @@ temp/
 .claude
 
 /backend/uploads/
+
+# Whisper.cpp - Large model files (download from Hugging Face)
+backend/whisper/models/*.bin
+backend/whisper/models/*.ggml
+backend/whisper/temp/*
+!backend/whisper/temp/.gitkeep
+
+# Whisper.cpp - Source code (can be cloned from GitHub)
+backend/whisper/whisper-source/

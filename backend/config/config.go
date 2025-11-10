@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -41,6 +43,20 @@ type Config struct {
 
 	// ElevenLabs
 	ElevenLabsAPIKey string
+
+	// Whisper.cpp Configuration
+	WhisperBinaryPath       string
+	WhisperModelPath        string
+	WhisperTempDir          string
+	WhisperLanguage         string
+	WhisperModelName        string
+	WhisperThreads          int
+	WhisperProcessors       int
+	WhisperMaxLen           int
+	WhisperBeamSize         int
+	WhisperBestOf           int
+	WhisperWordTimestamps   bool
+	WhisperSupportedLangs   string
 }
 
 var AppConfig *Config
@@ -108,6 +124,20 @@ func LoadConfig() *Config {
 
 		// ElevenLabs
 		ElevenLabsAPIKey: getEnv("ELEVENLABS_API_KEY", ""),
+
+		// Whisper.cpp
+		WhisperBinaryPath:     getWhisperBinaryPath(),
+		WhisperModelPath:      getEnv("WHISPER_MODEL_PATH", "./backend/whisper/models/ggml-small.bin"),
+		WhisperTempDir:        getEnv("WHISPER_TEMP_DIR", "./backend/whisper/temp"),
+		WhisperLanguage:       getEnv("WHISPER_LANGUAGE", "auto"),
+		WhisperModelName:      getEnv("WHISPER_MODEL_NAME", "small"),
+		WhisperThreads:        getEnvAsInt("WHISPER_THREADS", 4),
+		WhisperProcessors:     getEnvAsInt("WHISPER_PROCESSORS", 1),
+		WhisperMaxLen:         getEnvAsInt("WHISPER_MAX_LEN", 0),
+		WhisperBeamSize:       getEnvAsInt("WHISPER_BEAM_SIZE", 5),
+		WhisperBestOf:         getEnvAsInt("WHISPER_BEST_OF", 5),
+		WhisperWordTimestamps: getEnvAsBool("WHISPER_WORD_TIMESTAMPS", false),
+		WhisperSupportedLangs: getEnv("WHISPER_SUPPORTED_LANGUAGES", "th,en,auto"),
 	}
 
 	// Validate required configs
@@ -132,6 +162,63 @@ func getEnv(key, defaultValue string) string {
 		return defaultValue
 	}
 	return value
+}
+
+// getEnvAsInt retrieves environment variable as integer or returns default value
+func getEnvAsInt(key string, defaultValue int) int {
+	valueStr := os.Getenv(key)
+	if valueStr == "" {
+		return defaultValue
+	}
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		log.Printf("Warning: Invalid integer value for %s, using default: %d", key, defaultValue)
+		return defaultValue
+	}
+	return value
+}
+
+// getEnvAsBool retrieves environment variable as boolean or returns default value
+func getEnvAsBool(key string, defaultValue bool) bool {
+	valueStr := os.Getenv(key)
+	if valueStr == "" {
+		return defaultValue
+	}
+	// Support multiple boolean representations
+	valueStr = strings.ToLower(strings.TrimSpace(valueStr))
+	switch valueStr {
+	case "true", "1", "yes", "on":
+		return true
+	case "false", "0", "no", "off":
+		return false
+	default:
+		log.Printf("Warning: Invalid boolean value for %s: %s, using default: %v", key, valueStr, defaultValue)
+		return defaultValue
+	}
+}
+
+// getWhisperBinaryPath returns the correct Whisper binary path based on the OS
+func getWhisperBinaryPath() string {
+	var envKey string
+	switch runtime.GOOS {
+	case "windows":
+		envKey = "WHISPER_BINARY_PATH_WINDOWS"
+	case "darwin":
+		envKey = "WHISPER_BINARY_PATH_MACOS"
+	case "linux":
+		envKey = "WHISPER_BINARY_PATH_LINUX"
+	default:
+		envKey = "WHISPER_BINARY_PATH_LINUX"
+	}
+
+	defaultPath := "./backend/whisper/binary/linux/main"
+	if runtime.GOOS == "windows" {
+		defaultPath = "./backend/whisper/binary/windows/main.exe"
+	} else if runtime.GOOS == "darwin" {
+		defaultPath = "./backend/whisper/binary/macos/main"
+	}
+
+	return getEnv(envKey, defaultPath)
 }
 
 // GetConfig returns the application configuration
